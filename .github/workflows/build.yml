@@ -33,9 +33,6 @@ on:
         description: "压缩包 SHA256（可选）"
         required: false
 
-env:
-  CLT_DIR: ${{ runner.temp }}/harmony-clt
-
 jobs:
   build:
     name: Build debug HAP
@@ -45,6 +42,7 @@ jobs:
 
       - name: Install HarmonyOS command-line tools
         env:
+          CLT_DIR: ${{ runner.temp }}/harmony-clt
           CLT_URL_INPUT: ${{ github.event.inputs.clt_url }}
           CLT_SHA_INPUT: ${{ github.event.inputs.clt_sha256 }}
           CLT_URL_VAR: ${{ vars.CLT_URL }}
@@ -67,11 +65,15 @@ jobs:
           ls "$CLT_DIR"
 
       - name: Install dependencies
+        env:
+          CLT_DIR: ${{ runner.temp }}/harmony-clt
         run: |
           export PATH="$CLT_DIR/command-line-tools/ohpm/bin:$CLT_DIR/command-line-tools/hvigor/bin:$PATH"
           ohpm install --all
 
       - name: Build debug HAP
+        env:
+          CLT_DIR: ${{ runner.temp }}/harmony-clt
         run: |
           export PATH="$CLT_DIR/command-line-tools/ohpm/bin:$CLT_DIR/command-line-tools/hvigor/bin:$PATH"
           hvigorw --mode module -p module=entry@default -p buildMode=debug assembleHap --no-daemon
@@ -95,6 +97,7 @@ jobs:
 
       - name: Install HarmonyOS command-line tools
         env:
+          CLT_DIR: ${{ runner.temp }}/harmony-clt
           CLT_URL_INPUT: ${{ github.event.inputs.clt_url }}
           CLT_SHA_INPUT: ${{ github.event.inputs.clt_sha256 }}
           CLT_URL_VAR: ${{ vars.CLT_URL }}
@@ -110,11 +113,15 @@ jobs:
           unzip -q "$CLT_DIR/clt.zip" -d "$CLT_DIR"
 
       - name: Install dependencies
+        env:
+          CLT_DIR: ${{ runner.temp }}/harmony-clt
         run: |
           export PATH="$CLT_DIR/command-line-tools/ohpm/bin:$CLT_DIR/command-line-tools/hvigor/bin:$PATH"
           ohpm install --all
 
       - name: Build release HAP
+        env:
+          CLT_DIR: ${{ runner.temp }}/harmony-clt
         run: |
           export PATH="$CLT_DIR/command-line-tools/ohpm/bin:$CLT_DIR/command-line-tools/hvigor/bin:$PATH"
           hvigorw --mode module -p module=entry@default -p buildMode=release assembleHap --no-daemon
