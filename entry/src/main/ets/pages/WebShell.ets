@@ -269,7 +269,7 @@ struct WebShell {
     .width('100%')
     .height('100%')
     .backgroundColor(Color.White)
-    .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.TOP, SafeAreaEdge.BOTTOM])
+    // 保持默认安全区布局（不扩展，避免内容与状态栏重叠）
     .onAreaChange((oldValue: Area, newValue: Area) => {
       const w = newValue.width as number;
       const nowWide = w >= AppConstants.WIDE_BREAKPOINT;

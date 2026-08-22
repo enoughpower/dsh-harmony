@@ -26,12 +26,8 @@ export default class EntryAbility extends UIAbility {
   onWindowStageCreate(windowStage: window.WindowStage): void {
     hilog.info(DOMAIN, TAG, 'EntryAbility onWindowStageCreate.');
     this.winStage = windowStage;
-    try {
-      const win = windowStage.getMainWindowSync();
-      win.setWindowLayoutFullScreen(true);
-    } catch (e) {
-      hilog.warn(DOMAIN, TAG, 'setWindowLayoutFullScreen failed: %{public}s', (e as Error).message);
-    }
+    // 注意：不启用 setWindowLayoutFullScreen——真机验证全屏后状态栏与内容重叠；
+    // 保持默认布局（内容自动避让状态栏），仅调系统栏内容色跟随深浅色。
     this.applySystemBarStyle();
     windowStage.loadContent('pages/Index', (err) => {
       if (err.code) {

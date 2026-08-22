@@ -234,6 +234,6 @@ struct Index {
     .height('100%')
     .padding({ left: 20, right: 20, top: 16, bottom: 20 })
     .backgroundColor($r('app.color.page_background'))
-    .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.TOP, SafeAreaEdge.BOTTOM])
+    // 保持默认安全区布局（不扩展，避免内容与状态栏重叠）
   }
 }

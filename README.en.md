@@ -90,11 +90,15 @@ Toolchain paths can be overridden via environment variables (`DEVECO_HOME` / `DE
 - tag `v*`: release build + signing (repository secrets) → GitHub Release
 - Build env: Huawei official "HarmonyOS standalone command-line tools" (SDK bundled), auto-downloaded on ubuntu runners
 
-**First-time CI setup — provide the toolchain URL** (either way):
-1. Paste the direct link in the workflow_dispatch input box
-2. Set repository variables: `CLT_URL` (direct link), `CLT_SHA256` (optional)
+**First-time CI setup — provide the toolchain package** (this repo distributes via GitHub Release; `CLT_URL` already configured):
 
-Get the link: sign in to [Huawei Developer download center - Command Line Tools](https://developer.huawei.com/consumer/cn/download/command-line-tools-for-hmos), pick the version matching the project SDK (7.0.1(25)), copy the direct download URL.
+| Option | Notes |
+| --- | --- |
+| Release distribution (current) | `gh release upload` the package to a Release; point `CLT_URL` at the asset URL |
+| Huawei download-center direct link | paste in workflow_dispatch inputs, or set variable `CLT_URL` / `CLT_SHA256` |
+| Local download | download package locally then upload to Release (GitHub 2GiB single-file cap; split if larger) |
+
+Get the package from [Huawei Developer download center - Command Line Tools](https://developer.huawei.com/consumer/cn/download/command-line-tools-for-hmos) — choose **Linux x64** matching the project SDK (6.1.1(24)), version 6.1.1.300.
 
 Signing secrets: `SIGNING_KEY` (p12 base64) / `SIGNING_CERT` / `SIGNING_PROFILE` / `KEYSTORE_PASSWORD` / `KEY_PASSWORD` / `KEY_ALIAS`
 
