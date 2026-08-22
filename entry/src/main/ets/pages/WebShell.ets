@@ -75,7 +75,7 @@ struct WebShell {
         .width(36)
         .height(36)
         .fontSize(16)
-        .backgroundColor('#F0F1F5')
+        .backgroundColor($r('app.color.button_surface'))
         .fontColor($r('app.color.text_primary'))
         .onClick(() => {
           if (this.controller.accessBackward()) {
@@ -94,7 +94,7 @@ struct WebShell {
         .width(36)
         .height(36)
         .fontSize(16)
-        .backgroundColor('#F0F1F5')
+        .backgroundColor($r('app.color.button_surface'))
         .fontColor($r('app.color.text_primary'))
         .onClick(() => {
           this.onRefresh();
@@ -103,7 +103,7 @@ struct WebShell {
         .width(36)
         .height(36)
         .fontSize(16)
-        .backgroundColor('#F0F1F5')
+        .backgroundColor($r('app.color.button_surface'))
         .fontColor($r('app.color.text_primary'))
         .bindMenu([
           {
@@ -148,7 +148,7 @@ struct WebShell {
             this.onRetry();
           })
         Button('返回首页')
-          .backgroundColor('#F0F1F5')
+          .backgroundColor($r('app.color.button_surface'))
           .fontColor($r('app.color.text_primary'))
           .onClick(() => {
             this.backHome();
@@ -185,7 +185,7 @@ struct WebShell {
         .width('100%')
         .height(40)
         .fontSize(14)
-        .backgroundColor('#F0F1F5')
+        .backgroundColor($r('app.color.button_surface'))
         .fontColor($r('app.color.text_primary'))
         .onClick(() => {
           this.backHome();
@@ -199,7 +199,7 @@ struct WebShell {
     .width(220)
     .height('100%')
     .padding(16)
-    .backgroundColor('#F7F8FA')
+    .backgroundColor($r('app.color.panel_background'))
   }
 
   build() {

@@ -152,7 +152,7 @@ struct Index {
       Button('设置')
         .height(32)
         .fontSize(13)
-        .backgroundColor('#F0F1F5')
+        .backgroundColor($r('app.color.button_surface'))
         .fontColor($r('app.color.text_primary'))
         .onClick(() => {
           router.pushUrl({ url: 'pages/SettingsPage' });
@@ -177,7 +177,7 @@ struct Index {
         .width('100%')
         .height(44)
         .fontSize(15)
-        .backgroundColor('#F0F1F5')
+        .backgroundColor($r('app.color.button_surface'))
         .fontColor($r('app.color.text_primary'))
         .onClick(() => {
           this.dialogController.open();

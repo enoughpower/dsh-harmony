@@ -30,7 +30,7 @@ export struct UrlInputDialog {
       Row({ space: 12 }) {
         Button('取消')
           .layoutWeight(1)
-          .backgroundColor('#F0F1F5')
+          .backgroundColor($r('app.color.button_surface'))
           .fontColor($r('app.color.text_primary'))
           .onClick(() => {
             this.controller.close();

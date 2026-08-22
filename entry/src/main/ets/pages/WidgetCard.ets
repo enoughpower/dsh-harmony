@@ -15,7 +15,7 @@ struct WidgetCard {
         Text(this.appName)
           .fontSize(14)
           .fontWeight(FontWeight.Bold)
-          .fontColor('#1A1A1A')
+          .fontColor($r('app.color.text_primary'))
         Blank()
         Text('🐋')
           .fontSize(14)
@@ -24,7 +24,7 @@ struct WidgetCard {
 
       Text(this.lastUrlDisplay)
         .fontSize(12)
-        .fontColor('#8A8F99')
+        .fontColor($r('app.color.text_secondary'))
         .maxLines(2)
         .textOverflow({ overflow: TextOverflow.Ellipsis })
         .width('100%')
@@ -35,7 +35,7 @@ struct WidgetCard {
         .width('100%')
         .height(28)
         .fontSize(12)
-        .backgroundColor('#4D6BFE')
+        .backgroundColor($r('app.color.primary'))
         .fontColor(Color.White)
         .onClick(() => {
           postCardAction(this, {
@@ -51,6 +51,6 @@ struct WidgetCard {
     .width('100%')
     .height('100%')
     .padding(12)
-    .backgroundColor('#F7F8FA')
+    .backgroundColor($r('app.color.panel_background'))
   }
 }

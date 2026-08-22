@@ -31,6 +31,14 @@
     {
       "name": "error",
       "value": "#E84026"
+    },
+    {
+      "name": "button_surface",
+      "value": "#F0F1F5"
+    },
+    {
+      "name": "panel_background",
+      "value": "#F7F8FA"
     }
   ]
 }
