@@ -39,6 +39,19 @@ HarmonyOS 应用**必须签名才能安装到真机**。本工程为自用场景
 
 打 tag `v1.0.0` 推送后，release job 会自动签名并发布到 GitHub Release。
 
+## 多设备调试（调试签名方案）
+
+调试签名（Automatically generate signature）的 profile 绑定**允许调试的设备 UDID 列表**，默认只有自动签名时连接的那台手机。
+
+**加新设备步骤**（换手机 / 加平板，普通账号支持多台）：
+
+1. 新设备开启开发者模式 + USB 调试，连接电脑（会弹"允许 USB 调试"）
+2. DevEco 打开工程 → `File > Project Structure > Signing Configs`
+3. 重新点 **Automatically generate signature**（或 Sign In 后重新生成）→ DevEco 自动把新设备 UDID 加入 profile
+4. 重新构建（`./scripts/build.sh`）→ 新的 HAP 即可在两台设备上安装
+
+> 注意：**profile 变了要重装**——旧设备的旧安装包不需要重装（认证在安装时校验）；新设备装新版包即可。
+
 ## 常见问题
 
 - **时间不一致**：本地系统时间必须与北京时间同步，否则签名校验失败
