@@ -235,18 +235,16 @@ struct WebShell {
                 }
               })
               .onErrorReceive((event: OnErrorReceiveEvent) => {
+                // 仅网络级错误（DNS 失败/连接拒绝/超时）显示错误页
                 this.failed = true;
                 this.failText = '网络错误：无法连接 ' + UrlUtils.display(this.url, 32);
                 this.loading = false;
                 hilog.error(DOMAIN, TAG, 'web error: %{public}s', event.error?.getErrorInfo() ?? 'unknown');
               })
               .onHttpErrorReceive((event: OnHttpErrorReceiveEvent) => {
+                // HTTP 状态码不拦截：dsh-pocket 的 PIN 页/登录挑战/子资源 401 都交给页面自身处理
                 const code = event.response?.getResponseCode() ?? 0;
-                if (code >= 400) {
-                  this.failed = true;
-                  this.failText = 'HTTP ' + code + '：' + UrlUtils.display(this.url, 32);
-                  this.loading = false;
-                }
+                hilog.info(DOMAIN, TAG, 'http %{public}d for %{public}s', code, UrlUtils.display(this.url, 24));
               })
               .width('100%')
               .height('100%')

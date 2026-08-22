@@ -35,6 +35,13 @@
 ### ci
 - 修复 workflow 顶层 env 引用 runner.temp 导致 run 即失败的问题（移到 step env）；actionlint 本地校验通过；CI 链路验证：触发→checkout→工具链安装（CLT_URL 配置后全通）
 
+### fix
+- WebShell 不再拦截 HTTP 状态码（dsh-pocket PIN 页的子资源 401 曾触发错误覆盖层）；只拦截网络级错误
+- smoke.sh dumpLayout 改为 -p 存文件再 cat（原写法捕获不到布局内容）
+
+### test
+- 真机全链路验证通过（Pura 80 Pro / 7.0.0 / API 26）：签名构建 → 安装 → 首页 → 输入地址 → WebShell → dsh-pocket PIN 认证 → DSH 主界面可用（发送/模型/工作区）
+
 ### docs
 - README / README.en 双语说明
 - docs/architecture.md 架构设计

@@ -40,7 +40,9 @@ echo "==> 冷启动应用"
 sleep 3
 
 echo "==> UI 布局校验（uitest dumpLayout）"
-LAYOUT="$("$HDC" shell uitest dumpLayout 2>/dev/null || true)"
+# 注意：dumpLayout 结果保存到设备端文件（不打印到 stdout），需 -p + cat 读取
+"$HDC" shell uitest dumpLayout -p /data/local/tmp/dsh_smoke_layout.json >/dev/null 2>&1 || true
+LAYOUT="$("$HDC" shell cat /data/local/tmp/dsh_smoke_layout.json 2>/dev/null || true)"
 if echo "$LAYOUT" | grep -q "DSH Harmony"; then
   echo "PASS: 首页包含 'DSH Harmony'"
 else
