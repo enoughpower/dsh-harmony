@@ -61,6 +61,8 @@ dsh-pocket 安装与使用见其 [README](https://github.com/shaobeichen/dsh-poc
 
 ### 测试
 
+测试分层与规范详见 [docs/TESTING.md](docs/TESTING.md)：
+
 - 单元测试（Hypium）：`entry/src/test/`，覆盖 URL 校验与连接模型序列化
 - UI 冒烟（ohosTest）：启动 → 断言首页元素
 - 真机冒烟：`scripts/smoke.sh`（uitest dumpLayout 校验 + hilog 错误检查）
