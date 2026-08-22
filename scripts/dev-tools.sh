@@ -38,6 +38,13 @@ find_sdk_home() {
   fi
   local dc="${DEVECO_HOME:-}"
   if [ -n "$dc" ] && [ -d "$dc/Contents/sdk" ]; then echo "$dc/Contents/sdk"; return; fi
+  # HarmonyOS 独立命令行工具包布局（HOS_SDK_HOME 指向工具包内 sdk/）
+  if [ -n "${HOS_SDK_HOME:-}" ] && [ -x "$HOS_SDK_HOME/openharmony/toolchains/hdc" ]; then
+    echo "$HOS_SDK_HOME"; return
+  fi
+  for p in "$HOME/.harmony/command-line-tools/sdk" "/opt/huawei/command-line-tools/sdk"; do
+    [ -x "$p/openharmony/toolchains/hdc" ] && echo "$p" && return
+  done
   for p in "$HOME/Library/OpenHarmony/Sdk" "$HOME/Library/Huawei/Sdk" "/Users/$USER/OpenHarmony/Sdk"; do
     [ -d "$p" ] && echo "$p" && return
   done
@@ -47,9 +54,20 @@ DEVECO_HOME="${DEVECO_HOME:-$(find_deveco_home)}"
 DEVECO_SDK_HOME="${DEVECO_SDK_HOME:-$(find_sdk_home)}"
 
 # 逐个解析可执行文件（环境变量 > DevEco 内置 > PATH）
+# 独立命令行工具包位置（未装 DevEco 时的轻量方案）
+CLT_ROOT="${CLT_ROOT:-}"
+if [ -z "$CLT_ROOT" ]; then
+  for p in "$HOME/.harmony/command-line-tools" "/opt/huawei/command-line-tools"; do
+    [ -d "$p" ] && CLT_ROOT="$p" && break
+  done
+fi
+
 HVIGORW="${HVIGORW:-}"
 if [ -z "$HVIGORW" ] && [ -n "$DEVECO_HOME" ] && [ -x "$DEVECO_HOME/Contents/tools/hvigor/bin/hvigorw" ]; then
   HVIGORW="$DEVECO_HOME/Contents/tools/hvigor/bin/hvigorw"
+fi
+if [ -z "$HVIGORW" ] && [ -n "$CLT_ROOT" ] && [ -x "$CLT_ROOT/hvigor/bin/hvigorw" ]; then
+  HVIGORW="$CLT_ROOT/hvigor/bin/hvigorw"
 fi
 [ -z "$HVIGORW" ] && HVIGORW=$(find_in_path hvigorw)
 
@@ -57,21 +75,28 @@ OHPM="${OHPM:-}"
 if [ -z "$OHPM" ] && [ -n "$DEVECO_HOME" ] && [ -x "$DEVECO_HOME/Contents/tools/ohpm/bin/ohpm" ]; then
   OHPM="$DEVECO_HOME/Contents/tools/ohpm/bin/ohpm"
 fi
+if [ -z "$OHPM" ] && [ -n "$CLT_ROOT" ] && [ -x "$CLT_ROOT/ohpm/bin/ohpm" ]; then
+  OHPM="$CLT_ROOT/ohpm/bin/ohpm"
+fi
 [ -z "$OHPM" ] && OHPM=$(find_in_path ohpm)
 
 HDC="${HDC:-}"
 if [ -z "$HDC" ] && [ -n "$DEVECO_SDK_HOME" ] && [ -x "$DEVECO_SDK_HOME/default/openharmony/toolchains/hdc" ]; then
   HDC="$DEVECO_SDK_HOME/default/openharmony/toolchains/hdc"
 fi
+if [ -z "$HDC" ] && [ -n "$DEVECO_SDK_HOME" ] && [ -x "$DEVECO_SDK_HOME/openharmony/toolchains/hdc" ]; then
+  HDC="$DEVECO_SDK_HOME/openharmony/toolchains/hdc"
+fi
 [ -z "$HDC" ] && HDC=$(find_in_path hdc)
 
-export DEVECO_HOME DEVECO_SDK_HOME HVIGORW OHPM HDC
+export DEVECO_HOME DEVECO_SDK_HOME CLT_ROOT HVIGORW OHPM HDC
 
 if [ "${BASH_SOURCE[0]}" = "$0" ]; then
   echo "DEVECO_HOME=$DEVECO_HOME"
   echo "DEVECO_SDK_HOME=$DEVECO_SDK_HOME"
+  echo "CLT_ROOT=$CLT_ROOT"
   echo "HVIGORW=$HVIGORW"
   echo "OHPM=$OHPM"
   echo "HDC=$HDC"
-  [ -z "$HVIGORW" ] && echo "提示: 未找到 hvigorw，请安装 DevEco Studio 或设置 HVIGORW 环境变量" >&2
+  [ -z "$HVIGORW" ] && echo "提示: 未找到 hvigorw，请安装 DevEco Studio 或命令行工具包（或设置 HVIGORW 环境变量）" >&2
 fi

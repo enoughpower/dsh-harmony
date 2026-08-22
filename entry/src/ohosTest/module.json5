@@ -16,6 +16,8 @@
         "description": "$string:TestAbility_desc",
         "icon": "$media:icon",
         "label": "$string:TestAbility_label",
+        "startWindowIcon": "$media:icon",
+        "startWindowBackground": "$color:start_window_background",
         "exported": true,
         "skills": [
           {

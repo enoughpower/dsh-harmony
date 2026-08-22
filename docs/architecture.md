@@ -86,7 +86,7 @@ v1.0 已落地：
 - 本地构建：scripts/build.sh（探测 DevEco 工具链；环境变量可覆盖）
 - 签名：自用场景，DevEco 登录华为账号自动签名最省事；CI 签名走 repository secrets + hap-sign-tool.jar
 - 分发：自用 HAP 直接安装（`hdc install -r` 或手机本地安装）；GitHub Release 作为备份分发通道
-- 目标系统：HarmonyOS 7.0.1（手机，API 25），targetSdkVersion = 7.0.1(25)，compatibleSdkVersion = 6.0.0(20)
+- 目标系统：HarmonyOS 7.0.1（手机，API 25），targetSdkVersion = 6.1.1(24)（本机 SDK），compatibleSdkVersion = 6.0.0(20)；工具链提供 API 25 后可升级
 
 ## 8. 已确认事项（2026-08-23 用户答复）
 

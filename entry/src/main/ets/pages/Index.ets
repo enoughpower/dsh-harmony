@@ -90,7 +90,8 @@ struct Index {
         scanTypes: [scanCore.ScanType.ALL],
         enableAlbum: true
       };
-      const result = await scanBarcode.startScanForResult(this.getUIContext().getHostContext(), options);
+      const ctx = this.getUIContext().getHostContext() as common.UIAbilityContext;
+      const result: scanBarcode.ScanResult = await scanBarcode.startScanForResult(ctx, options);
       const raw = result?.originalValue ?? '';
       hilog.info(DOMAIN, TAG, 'scan result: %{public}s', raw);
       if (raw.length > 0) {
@@ -110,7 +111,7 @@ struct Index {
       const atManager = abilityAccessCtrl.createAtManager();
       const ctx = this.getUIContext().getHostContext() as common.UIAbilityContext;
       atManager.requestPermissionsFromUser(ctx, ['ohos.permission.CAMERA'] as Permissions[])
-        .then((result: abilityAccessCtrl.PermissionRequestResult) => {
+        .then((result) => {
           const grants = result.authResults ?? [];
           resolve(grants.length > 0 && grants[0] === 0);
         })

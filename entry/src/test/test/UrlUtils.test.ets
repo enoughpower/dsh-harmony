@@ -60,7 +60,7 @@ export default function urlUtilsTest() {
     it('display_truncates_and_strips_scheme', 0, () => {
       const long = 'http://' + 'a'.repeat(100) + '.example.com';
       const d = UrlUtils.display(long, 20);
-      expect(d.length).assertLTE(21);
+      expect(d.length <= 21).assertTrue();
       expect(d.startsWith('http://')).assertFalse();
     });
   });

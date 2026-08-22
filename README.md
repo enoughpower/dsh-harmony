@@ -36,7 +36,7 @@ dsh-pocket 安装与使用见其 [README](https://github.com/shaobeichen/dsh-poc
 | 开发 | DevEco Studio 6.x（含 SDK / hvigor / ohpm / hdc） |
 | 设备 | 开启 USB 调试的鸿蒙手机 / 折叠屏 / 平板 |
 
-> 本工程配置：`targetSdkVersion = 7.0.1(25)`（HarmonyOS 7.0.1），`compatibleSdkVersion = 6.0.0(20)`（兼容面更宽）。
+> 本工程配置：`targetSdkVersion = 6.1.1(24)`（本机 DevEco 6.1.1 SDK），`compatibleSdkVersion = 6.0.0(20)`；手机 7.0.1(25) 完全兼容运行，待工具链提供 API 25 SDK 后可升级 targetSdkVersion。
 
 ## 快速开始
 

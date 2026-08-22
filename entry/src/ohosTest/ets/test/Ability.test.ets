@@ -1,13 +1,14 @@
 import { describe, expect, it } from '@ohos/hypium';
 import { Driver, ON } from '@kit.UiTestKit';
 import { abilityDelegatorRegistry } from '@kit.TestKit';
+import { Want } from '@kit.AbilityKit';
 
 export default function abilityTest() {
   describe('DSHHarmonySmoke', () => {
     it('launch_show_home_title', 0, async (done: Function) => {
       const delegator = abilityDelegatorRegistry.getAbilityDelegator();
       const bundleName = abilityDelegatorRegistry.getArguments().bundleName;
-      const want = {
+      const want: Want = {
         bundleName: bundleName,
         abilityName: 'EntryAbility'
       };

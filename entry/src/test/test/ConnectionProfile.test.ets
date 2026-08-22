@@ -15,7 +15,7 @@ export default function connectionProfileTest() {
       const p = new ConnectionProfile('https://abc.trycloudflare.com', '我的 DSH');
       const stored = p.toStored();
       const back = ConnectionProfile.fromStored(stored);
-      expect(back).assertNotNull();
+      expect(back !== null).assertTrue();
       if (back !== null) {
         expect(back.url).assertEqual('https://abc.trycloudflare.com');
         expect(back.title).assertEqual('我的 DSH');
@@ -32,7 +32,7 @@ export default function connectionProfileTest() {
 
     it('fromStored_missing_optional_fields', 0, () => {
       const p = ConnectionProfile.fromStored({ 'url': 'http://x:1' });
-      expect(p).assertNotNull();
+      expect(p !== null).assertTrue();
       if (p !== null) {
         expect(p.title).assertEqual('http://x:1');
         expect(p.addedAt).assertEqual(0);

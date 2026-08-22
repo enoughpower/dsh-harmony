@@ -51,8 +51,8 @@ export struct ConnectionCard {
     .padding({ left: 16, right: 12, top: 12, bottom: 12 })
     .backgroundColor($r('app.color.card_background'))
     .borderRadius($r('app.float.card_corner_radius'))
-    .onLongPress(() => {
+    .gesture(LongPressGesture().onAction(() => {
       this.onRemove(this.profile.url);
-    })
+    }))
   }
 }

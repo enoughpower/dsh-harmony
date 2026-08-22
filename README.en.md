@@ -36,7 +36,7 @@ See the [dsh-pocket README](https://github.com/shaobeichen/dsh-pocket) for plugi
 | Dev | DevEco Studio 6.x (SDK / hvigor / ohpm / hdc) |
 | Device | A HarmonyOS phone / foldable / tablet with USB debugging enabled |
 
-> SDK config: `targetSdkVersion = 7.0.1(25)` (HarmonyOS 7.0.1), `compatibleSdkVersion = 6.0.0(20)` (wider compatibility).
+> SDK config: `targetSdkVersion = 6.1.1(24)` (local DevEco 6.1.1 SDK), `compatibleSdkVersion = 6.0.0(20)`; runs fine on 7.0.1(25) phones, upgrade targetSdkVersion once an API 25 toolchain is available.
 
 ## Quick start
 

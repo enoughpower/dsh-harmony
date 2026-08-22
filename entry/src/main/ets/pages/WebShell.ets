@@ -217,8 +217,8 @@ struct WebShell {
               .javaScriptAccess(true)
               .domStorageAccess(true)
               .zoomAccess(false)
-              .overScrollMode(webview.OverScrollMode.NEVER)
-              .onProgressChange((event: webview.OnProgressChangeEvent) => {
+              .overScrollMode(OverScrollMode.NEVER)
+              .onProgressChange((event: OnProgressChangeEvent) => {
                 this.progress = event.newProgress;
               })
               .onPageBegin(() => {
@@ -228,19 +228,19 @@ struct WebShell {
                 this.loading = false;
                 this.failed = false;
               })
-              .onTitleReceive((event: webview.OnTitleReceiveEvent) => {
+              .onTitleReceive((event: OnTitleReceiveEvent) => {
                 const t = event.title ?? '';
                 if (t.length > 0) {
                   this.title = t;
                 }
               })
-              .onErrorReceive((event: webview.OnErrorReceiveEvent) => {
+              .onErrorReceive((event: OnErrorReceiveEvent) => {
                 this.failed = true;
                 this.failText = '网络错误：无法连接 ' + UrlUtils.display(this.url, 32);
                 this.loading = false;
                 hilog.error(DOMAIN, TAG, 'web error: %{public}s', event.error?.getErrorInfo() ?? 'unknown');
               })
-              .onHttpErrorReceive((event: webview.OnHttpErrorReceiveEvent) => {
+              .onHttpErrorReceive((event: OnHttpErrorReceiveEvent) => {
                 const code = event.response?.getResponseCode() ?? 0;
                 if (code >= 400) {
                   this.failed = true;

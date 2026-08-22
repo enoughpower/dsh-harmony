@@ -4,6 +4,7 @@
 /.hvigor
 /.idea
 **/build/
+**/.test/
 *.hap
 *.har
 *.hsp

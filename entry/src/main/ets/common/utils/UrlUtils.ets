@@ -6,10 +6,13 @@
  *  - 只放行 http/https，其余协议一律拒绝。
  */
 export class UrlUtils {
-  private static readonly SCHEME_RE: RegExp = /^[a-zA-Z][a-zA-Z0-9+.-]*:///;
-  private static readonly HTTP_RE: RegExp = /^https?:///i;
-  /** host 形态：域名 / IPv4 / IPv6 / localhost，可带端口 */
-  private static readonly HOST_RE: RegExp = /^[a-zA-Z0-9.-:[]]+$/;
+  private static readonly SCHEME_RE: RegExp = /^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//;
+  private static readonly HTTP_RE: RegExp = /^https?:\/\//i;
+  /**
+   * host 形态：域名 / IPv4 / IPv6（[::1]）/ localhost，可带端口。
+   * 注意：字符类含 [ ]，用 RegExp 构造器避免 ArkTS 字面量解析差异。
+   */
+  private static readonly HOST_RE: RegExp = new RegExp('^[a-zA-Z0-9.\\-:\\[\\]]+$');
 
   /**
    * 规范化 URL。

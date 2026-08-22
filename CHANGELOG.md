@@ -22,6 +22,13 @@
 ### ci
 - CI 改用华为官方 command-line-tools（CLT_URL 直链），弃用第三方容器镜像（匿名拉取被拒）
 
+### fix
+- 首轮实编译修复（DevEco 6.1.1 / SDK 24）：Web 事件类型与 OverScrollMode 改为全局类型；TestRunner 按官方模板重写（AbilityMonitor + startAbility）；Hypium 断言改用基础集；ArkTS 正则改 RegExp 构造器；targetSdkVersion 调整为本机 SDK 24
+- ohosTest/单测模块补齐 schema 字段（startWindowBackground 等），测试包构建通过
+
+### test
+- 单元测试 15 个用例全部通过（UrlUtils 11 + ConnectionProfile 4），行覆盖率 74% / 分支 87.5%
+
 ### docs
 - README / README.en 双语说明
 - docs/architecture.md 架构设计
