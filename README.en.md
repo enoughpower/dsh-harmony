@@ -36,7 +36,7 @@ See the [dsh-pocket README](https://github.com/shaobeichen/dsh-pocket) for plugi
 | Dev | DevEco Studio 6.x (SDK / hvigor / ohpm / hdc) |
 | Device | A HarmonyOS phone / foldable / tablet with USB debugging enabled |
 
-> The project currently uses `6.0.0(20)` for compatibleSdkVersion / targetSdkVersion; will be bumped once the HarmonyOS 7.0 API level is confirmed.
+> SDK config: `targetSdkVersion = 7.0.1(25)` (HarmonyOS 7.0.1), `compatibleSdkVersion = 6.0.0(20)` (wider compatibility).
 
 ## Quick start
 
@@ -68,7 +68,7 @@ Toolchain paths can be overridden via environment variables (`DEVECO_HOME` / `DE
 ## Project layout
 
 ```
-├── AppScope/              App-level config (bundleName: com.dsh.harmony)
+├── AppScope/              App-level config (bundleName: com.dsh.lite)
 ├── entry/                 Main module
 │   └── src/main/ets/
 │       ├── entryability/  EntryAbility (lifecycle)

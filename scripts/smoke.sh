@@ -9,7 +9,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 source "$ROOT/scripts/dev-tools.sh"
 
-BUNDLE="com.dsh.harmony"
+BUNDLE="com.dsh.lite"
 HAP=""
 SKIP_UNINSTALL=0
 for arg in "$@"; do

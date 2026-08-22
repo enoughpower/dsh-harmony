@@ -86,13 +86,13 @@ v1.0 已落地：
 - 本地构建：scripts/build.sh（探测 DevEco 工具链；环境变量可覆盖）
 - 签名：自用场景，DevEco 登录华为账号自动签名最省事；CI 签名走 repository secrets + hap-sign-tool.jar
 - 分发：自用 HAP 直接安装（`hdc install -r` 或手机本地安装）；GitHub Release 作为备份分发通道
-- 目标系统：HarmonyOS 7.0（手机），compileSdk/targetSdk 当前 6.0.0(20)，**待用户确认 7.0 对应 API 版本后升级**
+- 目标系统：HarmonyOS 7.0.1（手机，API 25），targetSdkVersion = 7.0.1(25)，compatibleSdkVersion = 6.0.0(20)
 
-## 8. 待确认事项（阻塞项，等用户答复）
+## 8. 已确认事项（2026-08-23 用户答复）
 
-1. 手机「关于本机」实际系统版本/API（决定 SDK 版本升级）
-2. DevEco Studio 安装方案（本机未发现应用本体）
-3. bundleName 是否采用 com.dsh.harmony
-4. GitHub 仓库地址（workflow 已就绪，仓库无关）
-5. 测试设备清单（折叠屏/平板型号）
-6. 华为账号情况（签名方案选择）
+1. ✅ 手机系统：HarmonyOS 7.0.1（API 25）→ targetSdkVersion = 7.0.1(25)
+2. ⏳ DevEco Studio：用户自行安装，装好后探测并验证构建
+3. ✅ bundleName：com.dsh.lite
+4. ⏳ GitHub 仓库：尚未创建（workflow 与仓库无关，建仓后 git remote add 即可）
+5. ✅ 测试设备：普通直板手机（7.0.1）；折叠屏/平板双栏逻辑以断点模拟验证，后续真机补测
+6. ⏳ 华为账号：未确认，默认走本地调试签名；装好 DevEco 后可自动签名

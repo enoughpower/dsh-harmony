@@ -1,6 +1,6 @@
 {
   "app": {
-    "bundleName": "com.dsh.harmony",
+    "bundleName": "com.dsh.lite",
     "vendor": "dsh",
     "versionCode": 1000000,
     "versionName": "1.0.0",

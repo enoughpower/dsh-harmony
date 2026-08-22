@@ -5,7 +5,7 @@
 #   命令行运行（需要先构建出测试包，命令因 hvigor 版本而异，见下）：
 #     hvigorw --mode module -p module=entry@default test        # hvigor 直接支持时
 #   aa test 参数（官方）：
-#     hdc shell aa test -b com.dsh.harmony -m entry_test -s unittest OpenHarmonyTestRunner
+#     hdc shell aa test -b com.dsh.lite -m entry_test -s unittest OpenHarmonyTestRunner
 set -uo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 source "$ROOT/scripts/dev-tools.sh"
@@ -26,5 +26,5 @@ fi
 
 echo
 echo "==> 直接跑已安装测试包的替代路径（如测试包已构建安装）:"
-echo "    hdc shell aa test -b com.dsh.harmony -m entry_test -s unittest OpenHarmonyTestRunner"
-echo "    hdc shell aa test -b com.dsh.harmony -m entry_test -s unittest OpenHarmonyTestRunner -s class DSHHarmonySmoke"
+echo "    hdc shell aa test -b com.dsh.lite -m entry_test -s unittest OpenHarmonyTestRunner"
+echo "    hdc shell aa test -b com.dsh.lite -m entry_test -s unittest OpenHarmonyTestRunner -s class DSHHarmonySmoke"

@@ -44,5 +44,5 @@ if [ "$INSTALL" = "1" ] && [ -n "${HDC:-}" ] && [ -n "$HAP" ]; then
   echo "==> 安装到设备"
   "$HDC" install -r "$HAP"
   echo "==> 启动应用"
-  "$HDC" shell aa start -a EntryAbility -b com.dsh.harmony
+  "$HDC" shell aa start -a EntryAbility -b com.dsh.lite
 fi
