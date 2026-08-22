@@ -1,0 +1,12 @@
+{
+  "string": [
+    {
+      "name": "TestAbility_desc",
+      "value": "DSH Harmony UI test ability"
+    },
+    {
+      "name": "TestAbility_label",
+      "value": "DSH Harmony Test"
+    }
+  ]
+}

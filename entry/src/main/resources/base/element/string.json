@@ -1,0 +1,20 @@
+{
+  "string": [
+    {
+      "name": "module_desc",
+      "value": "DSH Harmony entry module"
+    },
+    {
+      "name": "EntryAbility_desc",
+      "value": "DSH Harmony main entry"
+    },
+    {
+      "name": "EntryAbility_label",
+      "value": "DSH Harmony"
+    },
+    {
+      "name": "camera_permission_reason",
+      "value": "用于扫描 dsh-pocket 连接二维码"
+    }
+  ]
+}

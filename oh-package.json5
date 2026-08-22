@@ -1,0 +1,6 @@
+{
+  "modelVersion": "5.0.0",
+  "description": "DSH Harmony - HarmonyOS native client for DeepSeek Harness.",
+  "dependencies": {},
+  "devDependencies": {}
+}

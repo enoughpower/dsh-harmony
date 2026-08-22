@@ -1,0 +1,16 @@
+{
+  "float": [
+    {
+      "name": "page_title_font_size",
+      "value": "22fp"
+    },
+    {
+      "name": "page_body_font_size",
+      "value": "16fp"
+    },
+    {
+      "name": "card_corner_radius",
+      "value": "16vp"
+    }
+  ]
+}

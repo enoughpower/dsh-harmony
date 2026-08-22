@@ -1,0 +1,27 @@
+# ---- 依赖与构建产物 ----
+/node_modules
+/oh_modules
+/.hvigor
+/.idea
+**/build/
+*.hap
+*.har
+*.hsp
+local.properties
+*.log
+
+# ---- 本地签名材料（严禁提交，泄露=签名失守） ----
+*.p12
+*.cer
+*.p7b
+signingConfigs/
+keystore/
+
+# ---- 本地技能沉淀：开发经验/编码规范/Review 规范，不对外、不推远程 ----
+.agents/
+
+# ---- 系统/编辑器 ----
+.DS_Store
+Thumbs.db
+.vscode/
+*.iml

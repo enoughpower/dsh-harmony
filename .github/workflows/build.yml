@@ -1,0 +1,98 @@
+name: CI
+
+# DSH Harmony 持续集成：
+#  - push/PR 触发 debug 构建，产物上传 artifact（供自用安装）
+#  - tag v* 触发 release 构建 + 签名 + GitHub Release 发布
+#
+# 构建环境：社区维护的 HarmonyOS 命令行工具 Docker 镜像
+#   ghcr.io/sanchuanhehe/harmony-next-pipeline-docker/harmonyos-ci-image
+# 若镜像内置 SDK 版本低于本工程 compatibleSdkVersion，请更新镜像或改用自托管 runner。
+#
+# 签名（可选）：配置以下 repository secrets 后，tag 构建会自动签名：
+#   SIGNING_KEY / SIGNING_CERT / SIGNING_PROFILE   （p12/cer/p7b 的 base64）
+#   KEYSTORE_PASSWORD / KEY_PASSWORD / KEY_ALIAS
+# 生成方式：DevEco Studio 登录华为账号自动签名，或在本地生成 p12 + AGC 申请 cer/p7b。
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build debug HAP
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/sanchuanhehe/harmony-next-pipeline-docker/harmonyos-ci-image:latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: ohpm install --all
+
+      - name: Build debug HAP
+        run: hvigorw --mode module -p module=entry@default -p buildMode=debug assembleHap --no-daemon
+
+      - name: Upload HAP artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: dsh-harmony-debug
+          path: entry/build/default/outputs/default/*.hap
+          if-no-files-found: error
+
+  release:
+    name: Build release + sign + publish
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    container:
+      image: ghcr.io/sanchuanhehe/harmony-next-pipeline-docker/harmonyos-ci-image:latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: ohpm install --all
+
+      - name: Build release HAP
+        run: hvigorw --mode module -p module=entry@default -p buildMode=release assembleHap --no-daemon
+
+      - name: Sign HAP (if secrets present)
+        id: sign
+        if: env.SIGNING_KEY != '' && env.SIGNING_CERT != '' && env.SIGNING_PROFILE != ''
+        env:
+          SIGNING_KEY: ${{ secrets.SIGNING_KEY }}
+          SIGNING_CERT: ${{ secrets.SIGNING_CERT }}
+          SIGNING_PROFILE: ${{ secrets.SIGNING_PROFILE }}
+        run: |
+          set -e
+          HAP=$(find entry/build -name 'entry-default.hap' | head -1)
+          [ -z "$HAP" ] && { echo "HAP not found"; exit 1; }
+          echo "SIGNING_KEY" | base64 -d > /tmp/key.p12
+          echo "SIGNING_CERT" | base64 -d > /tmp/cert.cer
+          echo "SIGNING_PROFILE" | base64 -d > /tmp/profile.p7b
+          SIGN_TOOL=$(find / -name 'hap-sign-tool.jar' 2>/dev/null | head -1)
+          [ -z "$SIGN_TOOL" ] && { echo "hap-sign-tool.jar not found in image"; exit 1; }
+          java -jar "$SIGN_TOOL" sign-app \
+            -keyAlias "${{ secrets.KEY_ALIAS }}" \
+            -signAlg "SHA256withECDSA" \
+            -mode "localSign" \
+            -appCertFile /tmp/cert.cer \
+            -profileFile /tmp/profile.p7b \
+            -inFile "$HAP" \
+            -keystoreFile /tmp/key.p12 \
+            -outFile "${HAP%.hap}-signed.hap" \
+            -keyPwd "${{ secrets.KEY_PASSWORD }}" \
+            -keystorePwd "${{ secrets.KEYSTORE_PASSWORD }}" \
+            -signCode "1"
+          echo "signed=${HAP%.hap}-signed.hap" >> $GITHUB_OUTPUT
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            entry/build/default/outputs/default/*.hap
+          generate_release_notes: true

@@ -1,0 +1,12 @@
+{
+  "name": "dsh-harmony",
+  "version": "1.0.0",
+  "ohos": {
+    "org": "dsh",
+    "buildTool": "hvigor",
+    "directoryLevel": "project"
+  },
+  "description": "DSH Harmony - HarmonyOS native client for DeepSeek Harness (pairs with dsh-pocket).",
+  "license": "MIT",
+  "dependencies": {}
+}
