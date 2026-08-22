@@ -32,6 +32,9 @@
 ### chore
 - 推送 GitHub（enoughpower/dsh-harmony，分支 master）；新增 MIT LICENSE；SIGNING.md 签名指引；release 构建验证通过
 
+### ci
+- 修复 workflow 顶层 env 引用 runner.temp 导致 run 即失败的问题（移到 step env）；actionlint 本地校验通过；CI 链路验证：触发→checkout→工具链安装（CLT_URL 配置后全通）
+
 ### docs
 - README / README.en 双语说明
 - docs/architecture.md 架构设计
