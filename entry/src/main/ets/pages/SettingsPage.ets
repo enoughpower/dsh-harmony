@@ -4,6 +4,7 @@ import { promptAction } from '@kit.ArkUI';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { BusinessError } from '@kit.BasicServicesKit';
 import { ConnectionStore } from '../common/store/ConnectionStore';
+import { AppPrefs } from '../common/store/AppPrefs';
 
 const DOMAIN = 0x0000;
 const TAG = 'DSHHarmony';
@@ -16,11 +17,28 @@ const TAG = 'DSHHarmony';
 struct SettingsPage {
   @State version: string = '1.0.0';
   @State historyCount: number = 0;
+  @State autoScan: boolean = true;
   private store: ConnectionStore = new ConnectionStore();
 
   aboutToAppear(): void {
     this.loadVersion();
     this.loadHistoryCount();
+    this.loadAutoScan();
+  }
+
+  private loadAutoScan(): void {
+    const ctx = this.getUIContext().getHostContext() as common.UIAbilityContext;
+    AppPrefs.getBool(ctx, AppPrefs.KEY_AUTO_DISCOVER, true).then((v: boolean) => {
+      this.autoScan = v;
+    }).catch(() => {
+    });
+  }
+
+  private toggleAutoScan(checked: boolean): void {
+    this.autoScan = checked;
+    const ctx = this.getUIContext().getHostContext() as common.UIAbilityContext;
+    AppPrefs.setBool(ctx, AppPrefs.KEY_AUTO_DISCOVER, checked).catch(() => {
+    });
   }
 
   private loadVersion(): void {
@@ -102,6 +120,21 @@ struct SettingsPage {
         this.RowItem('连接历史（' + this.historyCount + ' 条）', () => {
           this.clearHistory();
         })
+        Row() {
+          Text('打开时自动扫描局域网')
+            .fontSize(15)
+            .fontColor($r('app.color.text_primary'))
+            .layoutWeight(1)
+          Toggle({ type: ToggleType.Switch, isOn: this.autoScan })
+            .selectedColor($r('app.color.primary'))
+            .onChange((checked: boolean) => {
+              this.toggleAutoScan(checked);
+            })
+        }
+        .width('100%')
+        .height(52)
+        .padding({ left: 16, right: 16 })
+        .backgroundColor($r('app.color.card_background'))
       }
       .width('100%')
       .borderRadius($r('app.float.card_corner_radius'))

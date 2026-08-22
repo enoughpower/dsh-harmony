@@ -10,6 +10,7 @@ import { ConnectionCard } from '../components/ConnectionCard';
 import { UrlInputDialog } from '../components/UrlInputDialog';
 import { CardSync } from '../common/store/CardSync';
 import { LanDiscovery, DiscoveredService } from '../common/utils/LanDiscovery';
+import { AppPrefs } from '../common/store/AppPrefs';
 
 const DOMAIN = 0x0000;
 const TAG = 'DSHHarmony';
@@ -25,7 +26,10 @@ struct Index {
   @State busy: boolean = false;
   @State scanning: boolean = false;
   @State discovered: DiscoveredService[] = [];
+  @State autoScanEnabled: boolean = true;
   private store: ConnectionStore = new ConnectionStore();
+  /** 会话内是否已自动扫描过（防止 WebShell 返回时重复扫/自动拉回） */
+  private autoScanned: boolean = false;
   private dialogController: CustomDialogController = new CustomDialogController({
     builder: UrlInputDialog({
       onConfirm: (url: string) => {
@@ -38,6 +42,10 @@ struct Index {
 
   aboutToAppear(): void {
     this.reloadHistory();
+    const ctx = this.getUIContext().getHostContext() as common.UIAbilityContext;
+    AppPrefs.getBool(ctx, AppPrefs.KEY_AUTO_DISCOVER, true).then((v: boolean) => {
+      this.autoScanEnabled = v;
+    });
   }
 
   onPageShow(): void {
@@ -47,6 +55,12 @@ struct Index {
     if (pending !== undefined && pending !== null && pending.length > 0) {
       AppStorage.setOrCreate('pendingDshUrl', '');
       this.openUrl(pending);
+      return;
+    }
+    // 打开即自动扫描（app 启动/首次进入时一次；返回首页不重复扫）
+    if (this.autoScanEnabled && !this.autoScanned) {
+      this.autoScanned = true;
+      this.discoverAndOpen();
     }
   }
 
