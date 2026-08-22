@@ -9,6 +9,7 @@ import { UrlUtils } from '../common/utils/UrlUtils';
 import { ConnectionCard } from '../components/ConnectionCard';
 import { UrlInputDialog } from '../components/UrlInputDialog';
 import { CardSync } from '../common/store/CardSync';
+import { LanDiscovery, DiscoveredService } from '../common/utils/LanDiscovery';
 
 const DOMAIN = 0x0000;
 const TAG = 'DSHHarmony';
@@ -22,6 +23,8 @@ const TAG = 'DSHHarmony';
 struct Index {
   @State connections: ConnectionProfile[] = [];
   @State busy: boolean = false;
+  @State scanning: boolean = false;
+  @State discovered: DiscoveredService[] = [];
   private store: ConnectionStore = new ConnectionStore();
   private dialogController: CustomDialogController = new CustomDialogController({
     builder: UrlInputDialog({
@@ -117,6 +120,36 @@ struct Index {
     }
   }
 
+  /** 自动发现局域网 dsh-pocket 服务：单个直接连，多个列出选择 */
+  private async discoverAndOpen(): Promise<void> {
+    if (this.scanning) {
+      return;
+    }
+    this.scanning = true;
+    this.discovered = [];
+    try {
+      await new Promise<void>((resolve: () => void) => {
+        setTimeout(resolve, 100);
+      });
+      const found = await LanDiscovery.discover();
+      if (found.length === 0) {
+        this.scanning = false;
+        return;
+      }
+      if (found.length === 1) {
+        this.scanning = false;
+        this.openUrl(found[0].url);
+        return;
+      }
+      this.discovered = found;
+      this.scanning = false;
+    } catch (e) {
+      this.scanning = false;
+      const err = e as BusinessError;
+      hilog.warn(DOMAIN, TAG, 'discover failed: %{public}s', err.message);
+    }
+  }
+
   private ensureCameraPermission(): Promise<boolean> {
     return new Promise<boolean>((resolve: (ok: boolean) => void) => {
       const atManager = abilityAccessCtrl.createAtManager();
@@ -182,6 +215,16 @@ struct Index {
         .onClick(() => {
           this.dialogController.open();
         })
+      Button('自动发现局域网 DSH（免扫码）')
+        .width('100%')
+        .height(44)
+        .fontSize(15)
+        .backgroundColor($r('app.color.button_surface'))
+        .fontColor($r('app.color.text_primary'))
+        .enabled(!this.scanning)
+        .onClick(() => {
+          this.discoverAndOpen();
+        })
     }
     .width('100%')
   }
@@ -223,6 +266,40 @@ struct Index {
       .layoutWeight(1)
       .width('100%')
       .scrollBar(BarState.Off)
+
+      if (this.scanning) {
+        Column({ space: 10 }) {
+          LoadingProgress()
+            .width(36)
+            .height(36)
+          Text('正在扫描局域网 3081 端口…')
+            .fontSize(13)
+            .fontColor($r('app.color.text_secondary'))
+        }
+        .width('100%')
+        .padding({ top: 24, bottom: 8 })
+      }
+
+      if (this.discovered.length > 0) {
+        Column({ space: 10 }) {
+          Text('发现 ' + this.discovered.length + ' 个局域网 DSH 服务')
+            .fontSize(13)
+            .fontColor($r('app.color.text_secondary'))
+            .alignSelf(ItemAlign.Start)
+          ForEach(this.discovered, (item: DiscoveredService) => {
+            ConnectionCard({
+              profile: new ConnectionProfile(item.url, item.host),
+              onOpen: (url: string) => {
+                this.openUrl(url);
+              },
+              onRemove: () => {
+                this.discovered = this.discovered.filter((s: DiscoveredService) => s.url !== item.url);
+              }
+            })
+          }, (item: DiscoveredService) => item.url)
+        }
+        .width('100%')
+      }
 
       if (this.connections.length === 0) {
         this.EmptyHistory()
