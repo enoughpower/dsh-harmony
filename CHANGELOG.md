@@ -29,6 +29,9 @@
 ### test
 - 单元测试 15 个用例全部通过（UrlUtils 11 + ConnectionProfile 4），行覆盖率 74% / 分支 87.5%
 
+### chore
+- 推送 GitHub（enoughpower/dsh-harmony，分支 master）；新增 MIT LICENSE；SIGNING.md 签名指引；release 构建验证通过
+
 ### docs
 - README / README.en 双语说明
 - docs/architecture.md 架构设计

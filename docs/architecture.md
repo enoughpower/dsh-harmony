@@ -93,6 +93,6 @@ v1.0 已落地：
 1. ✅ 手机系统：HarmonyOS 7.0.1（API 25）→ targetSdkVersion = 7.0.1(25)
 2. ⏳ DevEco Studio：用户自行安装，装好后探测并验证构建
 3. ✅ bundleName：com.dsh.lite
-4. ⏳ GitHub 仓库：尚未创建（workflow 与仓库无关，建仓后 git remote add 即可）
+4. ✅ GitHub 仓库：git@github.com:enoughpower/dsh-harmony.git（2026-08-23 推送，唯一分支 master）
 5. ✅ 测试设备：普通直板手机（7.0.1）；折叠屏/平板双栏逻辑以断点模拟验证，后续真机补测
 6. ⏳ 华为账号：未确认，默认走本地调试签名；装好 DevEco 后可自动签名
