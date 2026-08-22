@@ -1,0 +1,36 @@
+{
+  "color": [
+    {
+      "name": "start_window_background",
+      "value": "#121417"
+    },
+    {
+      "name": "page_background",
+      "value": "#121417"
+    },
+    {
+      "name": "primary",
+      "value": "#4D6BFE"
+    },
+    {
+      "name": "text_primary",
+      "value": "#E6E8EB"
+    },
+    {
+      "name": "text_secondary",
+      "value": "#9AA0A8"
+    },
+    {
+      "name": "card_background",
+      "value": "#1E2126"
+    },
+    {
+      "name": "divider",
+      "value": "#2A2E35"
+    },
+    {
+      "name": "error",
+      "value": "#F36D5C"
+    }
+  ]
+}

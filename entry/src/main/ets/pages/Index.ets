@@ -8,6 +8,7 @@ import { ConnectionStore } from '../common/store/ConnectionStore';
 import { UrlUtils } from '../common/utils/UrlUtils';
 import { ConnectionCard } from '../components/ConnectionCard';
 import { UrlInputDialog } from '../components/UrlInputDialog';
+import { CardSync } from '../common/store/CardSync';
 
 const DOMAIN = 0x0000;
 const TAG = 'DSHHarmony';
@@ -38,6 +39,12 @@ struct Index {
 
   onPageShow(): void {
     this.reloadHistory();
+    // 服务卡片点击直达：消费 pendingDshUrl 并跳转 WebShell
+    const pending = AppStorage.get<string>('pendingDshUrl');
+    if (pending !== undefined && pending !== null && pending.length > 0) {
+      AppStorage.setOrCreate('pendingDshUrl', '');
+      this.openUrl(pending);
+    }
   }
 
   private reloadHistory(): void {
@@ -60,6 +67,10 @@ struct Index {
     const profile = new ConnectionProfile(url, UrlUtils.display(url, 32));
     this.store.upsert(ctx, profile).then(() => {
       hilog.info(DOMAIN, TAG, 'connection saved: %{public}s', url);
+      // 同步服务卡片（最近连接）
+      CardSync.syncAll(ctx).catch(() => {
+        hilog.warn(DOMAIN, TAG, 'card sync failed');
+      });
     }).catch((e: BusinessError) => {
       hilog.warn(DOMAIN, TAG, 'save connection failed: %{public}s', e.message);
     });
@@ -223,5 +234,6 @@ struct Index {
     .height('100%')
     .padding({ left: 20, right: 20, top: 16, bottom: 20 })
     .backgroundColor($r('app.color.page_background'))
+    .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.TOP, SafeAreaEdge.BOTTOM])
   }
 }

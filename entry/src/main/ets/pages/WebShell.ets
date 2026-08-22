@@ -269,6 +269,7 @@ struct WebShell {
     .width('100%')
     .height('100%')
     .backgroundColor(Color.White)
+    .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.TOP, SafeAreaEdge.BOTTOM])
     .onAreaChange((oldValue: Area, newValue: Area) => {
       const w = newValue.width as number;
       const nowWide = w >= AppConstants.WIDE_BREAKPOINT;
