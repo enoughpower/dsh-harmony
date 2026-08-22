@@ -5,6 +5,7 @@ import { hilog } from '@kit.PerformanceAnalysisKit';
 import { ConnectionStore } from '../common/store/ConnectionStore';
 import { ConnectionProfile } from '../model/ConnectionProfile';
 import { CardSync } from '../common/store/CardSync';
+import { LanDiscovery } from '../common/utils/LanDiscovery';
 
 const DOMAIN = 0x0000;
 const TAG = 'DSHHarmony';
@@ -41,8 +42,17 @@ export default class EntryFormAbility extends FormExtensionAbility {
   }
 
   private refresh(formId: string): void {
-    this.store.loadAll(this.context).then((list: ConnectionProfile[]) => {
-      const fd = formBindingData.createFormBindingData(CardSync.dataFrom(list));
+    this.store.loadAll(this.context).then(async (list: ConnectionProfile[]) => {
+      let online = false;
+      let known = true;
+      if (list.length > 0) {
+        try {
+          online = await LanDiscovery.isOnline(list[0].url, 1500);
+        } catch (e) {
+          known = false;
+        }
+      }
+      const fd = formBindingData.createFormBindingData(CardSync.dataFrom(list, online, known));
       if (formId.length > 0) {
         formProvider.updateForm(formId, fd).catch((e: BusinessError) => {
           hilog.warn(DOMAIN, TAG, 'updateForm %{public}s failed: %{public}s', formId, e.message);

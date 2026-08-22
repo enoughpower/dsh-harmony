@@ -50,6 +50,11 @@ struct Index {
 
   onPageShow(): void {
     this.reloadHistory();
+    // 打开首页时同步服务卡片状态（在线探测）
+    const synCtx = this.getUIContext().getHostContext() as common.UIAbilityContext;
+    CardSync.syncAll(synCtx).catch((e: BusinessError) => {
+      hilog.warn(DOMAIN, TAG, 'card syncAll failed: %{public}s', e.message);
+    });
     // 服务卡片点击直达：消费 pendingDshUrl 并跳转 WebShell
     const pending = AppStorage.get<string>('pendingDshUrl');
     if (pending !== undefined && pending !== null && pending.length > 0) {

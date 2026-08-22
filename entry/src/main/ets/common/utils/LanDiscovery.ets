@@ -89,6 +89,35 @@ export class LanDiscovery {
     return found;
   }
 
+  /**
+   * 弱探测：目标是否在线（3081 端口可发 HTTP 即在线，不校验特征串）。
+   * 用于卡片"在线/离线"状态。
+   */
+  static async isOnline(url: string, timeoutMs: number = 1200): Promise<boolean> {
+    const request = http.createHttp();
+    try {
+      const resp = await request.request(url, {
+        method: http.RequestMethod.GET,
+        connectTimeout: timeoutMs,
+        readTimeout: timeoutMs,
+        header: {
+          'Accept': '*/*',
+          'User-Agent': 'DSH-Harmony/1.3'
+        }
+      });
+      const code = resp.responseCode ?? 0;
+      // 200/401/403/404 均视为服务在线；5xx/连接失败视为异常
+      return code > 0 && code < 500;
+    } catch (e) {
+      return false;
+    } finally {
+      try {
+        request.destroy();
+      } catch (e) {
+      }
+    }
+  }
+
   /** 探测单个地址：GET 根路径，响应含 "DSH Pocket" 即命中 */
   private static async probe(url: string, timeoutMs: number): Promise<DiscoveredService | null> {
     const request = http.createHttp();

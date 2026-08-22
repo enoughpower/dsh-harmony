@@ -5,6 +5,7 @@ import { BusinessError } from '@kit.BasicServicesKit';
 import { ConnectionStore } from './ConnectionStore';
 import { ConnectionProfile } from '../../model/ConnectionProfile';
 import { AppConstants } from '../constants/AppConstants';
+import { LanDiscovery } from '../utils/LanDiscovery';
 
 /**
  * 服务卡片同步：管理已添加卡片的 formId 列表，并在连接变化时刷新卡片数据。
@@ -18,20 +19,47 @@ export class CardSync {
     return {
       'appName': 'DSH Harmony',
       'lastUrl': '',
-      'lastUrlDisplay': '扫码连接 DSH'
+      'lastUrlDisplay': '扫码连接 DSH',
+      'online': 'unknown',
+      'lastUsedLabel': ''
     };
   }
 
-  /** 由最近连接生成卡片数据 */
-  static dataFrom(list: ConnectionProfile[]): Record<string, string> {
-    if (list.length > 0) {
-      return {
-        'appName': 'DSH Harmony',
-        'lastUrl': list[0].url,
-        'lastUrlDisplay': list[0].url.replace(/^https?:\/\//i, '')
-      };
+  /** 相对时间标签：刚刚 / N 分钟前 / N 小时前 / 昨天 / N 天前 */
+  static relativeLabel(ts: number): string {
+    if (ts <= 0) {
+      return '';
     }
-    return CardSync.defaultData();
+    const diff = Date.now() - ts;
+    const minute = 60 * 1000;
+    const hour = 60 * minute;
+    const day = 24 * hour;
+    if (diff < minute) {
+      return '刚刚';
+    }
+    if (diff < hour) {
+      return Math.floor(diff / minute) + ' 分钟前';
+    }
+    if (diff < day) {
+      return Math.floor(diff / hour) + ' 小时前';
+    }
+    if (diff < 2 * day) {
+      return '昨天';
+    }
+    return Math.floor(diff / day) + ' 天前';
+  }
+
+  /** 由最近连接生成卡片数据（含在线状态与相对时间）。在线探测失败按 unknown 呈现。 */
+  static dataFrom(list: ConnectionProfile[], online: boolean = false, known: boolean = true): Record<string, string> {
+    const base = CardSync.defaultData();
+    if (list.length > 0) {
+      const p = list[0];
+      base['lastUrl'] = p.url;
+      base['lastUrlDisplay'] = p.url.replace(/^https?:\/\//i, '');
+      base['lastUsedLabel'] = CardSync.relativeLabel(p.lastUsedAt);
+      base['online'] = known ? (online ? 'online' : 'offline') : 'unknown';
+    }
+    return base;
   }
 
   static async saveFormId(context: common.Context, formId: string): Promise<void> {
@@ -54,14 +82,24 @@ export class CardSync {
     }
   }
 
-  /** 用最近连接刷新所有已添加卡片（App 内建立新连接时调用） */
+  /** 用最近连接刷新所有已添加卡片（App 内建立新连接/打开首页时调用） */
   static async syncAll(context: common.Context): Promise<void> {
     const ids = await CardSync.loadIds(context);
     if (ids.length === 0) {
       return;
     }
     const list = await new ConnectionStore().loadAll(context);
-    const data = CardSync.dataFrom(list);
+    let online = false;
+    let known = true;
+    if (list.length > 0) {
+      // 探测最近连接在线状态（弱探测：3081 可通）
+      try {
+        online = await LanDiscovery.isOnline(list[0].url, 1500);
+      } catch (e) {
+        known = false;
+      }
+    }
+    const data = CardSync.dataFrom(list, online, known);
     const fd = formBindingData.createFormBindingData(data);
     for (const formId of ids) {
       formProvider.updateForm(formId, fd).catch((e: BusinessError) => {
