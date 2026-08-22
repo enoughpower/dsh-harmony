@@ -42,6 +42,13 @@
 ### test
 - 真机全链路验证通过（Pura 80 Pro / 7.0.0 / API 26）：签名构建 → 安装 → 首页 → 输入地址 → WebShell → dsh-pocket PIN 认证 → DSH 主界面可用（发送/模型/工作区）
 
+### ci
+- **CI 全绿**：工具包经 GitHub Release 分发（v0.1.0-tools，CLT_URL 变量），修复 DEVECO_SDK_HOME 后云端完整构建通过（下载→install→assembleHap→artifact）
+- workflow 支持 tag v* 触发 release 流程；actionlint 本地校验
+
+### fix
+- 窗口系统栏自定义彻底移除：全屏重叠、非全屏透明系统栏黑边两个问题均已回退（窗口恢复系统默认，深色由 dark 资源适配）
+
 ### docs
 - README / README.en 双语说明
 - docs/architecture.md 架构设计
