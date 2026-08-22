@@ -74,6 +74,7 @@ jobs:
       - name: Build debug HAP
         env:
           CLT_DIR: ${{ runner.temp }}/harmony-clt
+          DEVECO_SDK_HOME: ${{ runner.temp }}/harmony-clt/command-line-tools/sdk
         run: |
           export PATH="$CLT_DIR/command-line-tools/ohpm/bin:$CLT_DIR/command-line-tools/hvigor/bin:$PATH"
           hvigorw --mode module -p module=entry@default -p buildMode=debug assembleHap --no-daemon
@@ -122,6 +123,7 @@ jobs:
       - name: Build release HAP
         env:
           CLT_DIR: ${{ runner.temp }}/harmony-clt
+          DEVECO_SDK_HOME: ${{ runner.temp }}/harmony-clt/command-line-tools/sdk
         run: |
           export PATH="$CLT_DIR/command-line-tools/ohpm/bin:$CLT_DIR/command-line-tools/hvigor/bin:$PATH"
           hvigorw --mode module -p module=entry@default -p buildMode=release assembleHap --no-daemon
