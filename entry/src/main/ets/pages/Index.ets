@@ -3,7 +3,6 @@ import { abilityAccessCtrl, common, Permissions } from '@kit.AbilityKit';
 import { router } from '@kit.ArkUI';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { BusinessError } from '@kit.BasicServicesKit';
-import { AppConstants } from '../common/constants/AppConstants';
 import { ConnectionProfile } from '../model/ConnectionProfile';
 import { ConnectionStore } from '../common/store/ConnectionStore';
 import { UrlUtils } from '../common/utils/UrlUtils';

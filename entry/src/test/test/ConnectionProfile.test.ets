@@ -1,5 +1,5 @@
 import { describe, expect, it } from '@ohos/hypium';
-import { ConnectionProfile } from '../../../main/ets/model/ConnectionProfile';
+import { ConnectionProfile } from '../../main/ets/model/ConnectionProfile';
 
 export default function connectionProfileTest() {
   describe('ConnectionProfile', () => {

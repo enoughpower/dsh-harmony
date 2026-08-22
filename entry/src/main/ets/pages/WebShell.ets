@@ -125,12 +125,10 @@ struct WebShell {
   }
 
   private clearWebData(): void {
-    webview.WebStorage.deleteAllData().then(() => {
-      hilog.info(DOMAIN, TAG, 'web storage cleared');
-    }).catch((e: Error) => {
-      hilog.warn(DOMAIN, TAG, 'clear web storage failed: %{public}s', e.message);
-    });
-    webview.WebCookieManager.getInstance().clearAllCookies();
+    // 均为同步 API（WebStorage.deleteAllData / WebCookieManager.clearAllCookiesSync）
+    webview.WebStorage.deleteAllData();
+    webview.WebCookieManager.clearAllCookiesSync();
+    hilog.info(DOMAIN, TAG, 'web storage & cookies cleared');
   }
 
   @Builder

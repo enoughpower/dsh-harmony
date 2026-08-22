@@ -1,5 +1,5 @@
 import { describe, expect, it } from '@ohos/hypium';
-import { UrlUtils } from '../../../main/ets/common/utils/UrlUtils';
+import { UrlUtils } from '../../main/ets/common/utils/UrlUtils';
 
 export default function urlUtilsTest() {
   describe('UrlUtils', () => {

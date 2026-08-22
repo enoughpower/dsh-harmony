@@ -3,7 +3,6 @@ import { common, bundleManager } from '@kit.AbilityKit';
 import { promptAction } from '@kit.ArkUI';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { BusinessError } from '@kit.BasicServicesKit';
-import { AppConstants } from '../common/constants/AppConstants';
 import { ConnectionStore } from '../common/store/ConnectionStore';
 
 const DOMAIN = 0x0000;
@@ -54,12 +53,10 @@ struct SettingsPage {
   }
 
   private clearWebData(): void {
-    webview.WebStorage.deleteAllData().then(() => {
-      promptAction.showToast({ message: 'Web 缓存与数据已清除' });
-    }).catch((e: Error) => {
-      hilog.warn(DOMAIN, TAG, 'clear web data failed: %{public}s', e.message);
-    });
-    webview.WebCookieManager.getInstance().clearAllCookies();
+    // 均为同步 API（WebStorage.deleteAllData / WebCookieManager.clearAllCookiesSync）
+    webview.WebStorage.deleteAllData();
+    webview.WebCookieManager.clearAllCookiesSync();
+    promptAction.showToast({ message: 'Web 缓存与数据已清除' });
   }
 
   @Builder
