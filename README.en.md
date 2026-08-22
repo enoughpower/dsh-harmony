@@ -88,7 +88,13 @@ Toolchain paths can be overridden via environment variables (`DEVECO_HOME` / `DE
 
 - push / PR: ohpm install → assembleHap (debug), artifact upload
 - tag `v*`: release build + signing (repository secrets) → GitHub Release
-- Build image: `ghcr.io/sanchuanhehe/harmony-next-pipeline-docker/harmonyos-ci-image`
+- Build env: Huawei official "HarmonyOS standalone command-line tools" (SDK bundled), auto-downloaded on ubuntu runners
+
+**First-time CI setup — provide the toolchain URL** (either way):
+1. Paste the direct link in the workflow_dispatch input box
+2. Set repository variables: `CLT_URL` (direct link), `CLT_SHA256` (optional)
+
+Get the link: sign in to [Huawei Developer download center - Command Line Tools](https://developer.huawei.com/consumer/cn/download/command-line-tools-for-hmos), pick the version matching the project SDK (7.0.1(25)), copy the direct download URL.
 
 Signing secrets: `SIGNING_KEY` (p12 base64) / `SIGNING_CERT` / `SIGNING_PROFILE` / `KEYSTORE_PASSWORD` / `KEY_PASSWORD` / `KEY_ALIAS`
 

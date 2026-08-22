@@ -15,6 +15,13 @@
 ### chore
 - bundleName 定为 com.dsh.lite；targetSdkVersion 升至 7.0.1(25)（用户确认系统为 HarmonyOS 7.0.1 / API 25）
 
+### fix
+- WebStorage.deleteAllData 为同步 API，去除 .then()；WebCookieManager 静态类改用 clearAllCookiesSync
+- 删除未使用 import；修正单元测试相对导入路径；ohosTest 补齐 pages/Index 占位页
+
+### ci
+- CI 改用华为官方 command-line-tools（CLT_URL 直链），弃用第三方容器镜像（匿名拉取被拒）
+
 ### docs
 - README / README.en 双语说明
 - docs/architecture.md 架构设计

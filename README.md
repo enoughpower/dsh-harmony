@@ -90,7 +90,13 @@ dsh-pocket 安装与使用见其 [README](https://github.com/shaobeichen/dsh-poc
 
 - push / PR：ohpm install → assembleHap（debug），产物上传 artifact
 - tag `v*`：release 构建 + 签名（配置 secrets）→ GitHub Release 发布
-- 构建环境：`ghcr.io/sanchuanhehe/harmony-next-pipeline-docker/harmonyos-ci-image`
+- 构建环境：华为官方「HarmonyOS 独立命令行工具包」（内嵌 SDK），在 ubuntu runner 上自动下载安装
+
+**首次使用 CI 需要配置工具包直链**（二选一）：
+1. 手动触发 workflow（workflow_dispatch）时在输入框粘贴直链
+2. 设置 repository variables：`CLT_URL`（直链）、`CLT_SHA256`（可选）
+
+直链获取：登录 [华为开发者联盟下载中心 - Command Line Tools](https://developer.huawei.com/consumer/cn/download/command-line-tools-for-hmos)，选择与工程 SDK（7.0.1(25)）匹配的版本，复制下载直链。
 
 签名 secrets：`SIGNING_KEY`（p12 base64）/ `SIGNING_CERT` / `SIGNING_PROFILE` / `KEYSTORE_PASSWORD` / `KEY_PASSWORD` / `KEY_ALIAS`
 

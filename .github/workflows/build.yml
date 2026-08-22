@@ -1,17 +1,23 @@
 name: CI
 
-# DSH Harmony 持续集成：
-#  - push/PR 触发 debug 构建，产物上传 artifact（供自用安装）
-#  - tag v* 触发 release 构建 + 签名 + GitHub Release 发布
+# DSH Harmony 持续集成
 #
-# 构建环境：社区维护的 HarmonyOS 命令行工具 Docker 镜像
-#   ghcr.io/sanchuanhehe/harmony-next-pipeline-docker/harmonyos-ci-image
-# 若镜像内置 SDK 版本低于本工程 compatibleSdkVersion，请更新镜像或改用自托管 runner。
+# 构建环境：华为官方「HarmonyOS 独立命令行工具包」（内嵌 SDK，无需 DevEco IDE）。
+#   下载地址（需登录华为账号复制直链）：https://developer.huawei.com/consumer/cn/download/command-line-tools-for-hmos
+#   注意：工具包版本必须与工程 SDK 版本（7.0.1(25)）匹配，下载中心按版本列出。
 #
-# 签名（可选）：配置以下 repository secrets 后，tag 构建会自动签名：
-#   SIGNING_KEY / SIGNING_CERT / SIGNING_PROFILE   （p12/cer/p7b 的 base64）
+# 配置（二选一）：
+#   1. workflow_dispatch 手动运行时在输入框粘贴直链（最省事，首次推荐）
+#   2. 设置 repository variables：CLT_URL（直链）、CLT_SHA256（可选，完整性校验）
+#
+# 触发：
+#   - push / PR：debug 构建，产物上传 artifact（自用安装）
+#   - tag v*：release 构建 + 签名（secrets）+ GitHub Release 发布
+#
+# 签名 secrets（可选，tag 构建自动签名）：
+#   SIGNING_KEY / SIGNING_CERT / SIGNING_PROFILE  （p12/cer/p7b 的 base64）
 #   KEYSTORE_PASSWORD / KEY_PASSWORD / KEY_ALIAS
-# 生成方式：DevEco Studio 登录华为账号自动签名，或在本地生成 p12 + AGC 申请 cer/p7b。
+# 生成方式：DevEco Studio 登录华为账号自动签名后，把签名文件 base64 填入 secrets。
 
 on:
   push:
@@ -19,26 +25,61 @@ on:
   pull_request:
     branches: [main, master]
   workflow_dispatch:
+    inputs:
+      clt_url:
+        description: "Command Line Tools 压缩包直链（从华为下载中心复制）"
+        required: false
+      clt_sha256:
+        description: "压缩包 SHA256（可选）"
+        required: false
+
+env:
+  CLT_DIR: ${{ runner.temp }}/harmony-clt
 
 jobs:
   build:
     name: Build debug HAP
     runs-on: ubuntu-latest
-    container:
-      image: ghcr.io/sanchuanhehe/harmony-next-pipeline-docker/harmonyos-ci-image:latest
     steps:
       - uses: actions/checkout@v4
 
+      - name: Install HarmonyOS command-line tools
+        env:
+          CLT_URL_INPUT: ${{ github.event.inputs.clt_url }}
+          CLT_SHA_INPUT: ${{ github.event.inputs.clt_sha256 }}
+          CLT_URL_VAR: ${{ vars.CLT_URL }}
+          CLT_SHA_VAR: ${{ vars.CLT_SHA256 }}
+        run: |
+          set -euo pipefail
+          URL="${CLT_URL_INPUT:-${CLT_URL_VAR:-}}"
+          SHA="${CLT_SHA_INPUT:-${CLT_SHA_VAR:-}}"
+          if [ -z "$URL" ]; then
+            echo "::error::未配置 Command Line Tools 直链。请用 workflow_dispatch 输入或设置 repository variable CLT_URL"
+            echo "下载页: https://developer.huawei.com/consumer/cn/download/command-line-tools-for-hmos"
+            exit 1
+          fi
+          mkdir -p "$CLT_DIR"
+          curl -fsSL -o "$CLT_DIR/clt.zip" "$URL"
+          if [ -n "$SHA" ]; then
+            echo "$SHA  $CLT_DIR/clt.zip" | sha256sum -c -
+          fi
+          unzip -q "$CLT_DIR/clt.zip" -d "$CLT_DIR"
+          ls "$CLT_DIR"
+
       - name: Install dependencies
-        run: ohpm install --all
+        run: |
+          export PATH="$CLT_DIR/command-line-tools/ohpm/bin:$CLT_DIR/command-line-tools/hvigor/bin:$PATH"
+          ohpm install --all
 
       - name: Build debug HAP
-        run: hvigorw --mode module -p module=entry@default -p buildMode=debug assembleHap --no-daemon
+        run: |
+          export PATH="$CLT_DIR/command-line-tools/ohpm/bin:$CLT_DIR/command-line-tools/hvigor/bin:$PATH"
+          hvigorw --mode module -p module=entry@default -p buildMode=debug assembleHap --no-daemon
 
       - name: Upload HAP artifact
         uses: actions/upload-artifact@v4
         with:
-          name: dsh-harmony-debug
+          name: dsh-lite-debug
           path: entry/build/default/outputs/default/*.hap
           if-no-files-found: error
 
@@ -49,16 +90,34 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
-    container:
-      image: ghcr.io/sanchuanhehe/harmony-next-pipeline-docker/harmonyos-ci-image:latest
     steps:
       - uses: actions/checkout@v4
 
+      - name: Install HarmonyOS command-line tools
+        env:
+          CLT_URL_INPUT: ${{ github.event.inputs.clt_url }}
+          CLT_SHA_INPUT: ${{ github.event.inputs.clt_sha256 }}
+          CLT_URL_VAR: ${{ vars.CLT_URL }}
+          CLT_SHA_VAR: ${{ vars.CLT_SHA256 }}
+        run: |
+          set -euo pipefail
+          URL="${CLT_URL_INPUT:-${CLT_URL_VAR:-}}"
+          SHA="${CLT_SHA_INPUT:-${CLT_SHA_VAR:-}}"
+          [ -n "$URL" ] || { echo "::error::CLT_URL 未配置"; exit 1; }
+          mkdir -p "$CLT_DIR"
+          curl -fsSL -o "$CLT_DIR/clt.zip" "$URL"
+          if [ -n "$SHA" ]; then echo "$SHA  $CLT_DIR/clt.zip" | sha256sum -c -; fi
+          unzip -q "$CLT_DIR/clt.zip" -d "$CLT_DIR"
+
       - name: Install dependencies
-        run: ohpm install --all
+        run: |
+          export PATH="$CLT_DIR/command-line-tools/ohpm/bin:$CLT_DIR/command-line-tools/hvigor/bin:$PATH"
+          ohpm install --all
 
       - name: Build release HAP
-        run: hvigorw --mode module -p module=entry@default -p buildMode=release assembleHap --no-daemon
+        run: |
+          export PATH="$CLT_DIR/command-line-tools/ohpm/bin:$CLT_DIR/command-line-tools/hvigor/bin:$PATH"
+          hvigorw --mode module -p module=entry@default -p buildMode=release assembleHap --no-daemon
 
       - name: Sign HAP (if secrets present)
         id: sign
@@ -68,14 +127,14 @@ jobs:
           SIGNING_CERT: ${{ secrets.SIGNING_CERT }}
           SIGNING_PROFILE: ${{ secrets.SIGNING_PROFILE }}
         run: |
-          set -e
+          set -euo pipefail
           HAP=$(find entry/build -name 'entry-default.hap' | head -1)
-          [ -z "$HAP" ] && { echo "HAP not found"; exit 1; }
-          echo "SIGNING_KEY" | base64 -d > /tmp/key.p12
-          echo "SIGNING_CERT" | base64 -d > /tmp/cert.cer
-          echo "SIGNING_PROFILE" | base64 -d > /tmp/profile.p7b
-          SIGN_TOOL=$(find / -name 'hap-sign-tool.jar' 2>/dev/null | head -1)
-          [ -z "$SIGN_TOOL" ] && { echo "hap-sign-tool.jar not found in image"; exit 1; }
+          [ -n "$HAP" ] || { echo "::error::HAP not found"; exit 1; }
+          echo "$SIGNING_KEY" | base64 -d > /tmp/key.p12
+          echo "$SIGNING_CERT" | base64 -d > /tmp/cert.cer
+          echo "$SIGNING_PROFILE" | base64 -d > /tmp/profile.p7b
+          SIGN_TOOL=$(find "$CLT_DIR" -name 'hap-sign-tool.jar' 2>/dev/null | head -1)
+          [ -n "$SIGN_TOOL" ] || { echo "::error::hap-sign-tool.jar not found"; exit 1; }
           java -jar "$SIGN_TOOL" sign-app \
             -keyAlias "${{ secrets.KEY_ALIAS }}" \
             -signAlg "SHA256withECDSA" \
