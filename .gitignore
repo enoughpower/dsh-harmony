@@ -26,3 +26,6 @@ keystore/
 Thumbs.db
 .vscode/
 *.iml
+
+# 视觉分析工具工作目录
+.dsh-vision-router/
