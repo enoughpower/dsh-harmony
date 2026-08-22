@@ -4,14 +4,20 @@
 # 用法:
 #   ./scripts/gen-changelog.sh                # 今天的变更
 #   ./scripts/gen-changelog.sh 2026-08-23     # 指定日期
+#   ./scripts/gen-changelog.sh --dry-run      # 只打印不写文件
 #   ./scripts/gen-changelog.sh --commit       # 生成并自动 git commit 到 CHANGELOG.md
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
 DATE="${1:-$(date +%F)}"
-[ "$DATE" = "--commit" ] && DATE=$(date +%F) && DO_COMMIT=1
-DO_COMMIT="${DO_COMMIT:-0}"
+DO_COMMIT=0
+DRY_RUN=0
+case "$1" in
+  --commit) DATE=$(date +%F); DO_COMMIT=1 ;;
+  --dry-run) DATE=$(date +%F); DRY_RUN=1 ;;
+  ""|--*) ;;
+esac
 
 SINCE="$DATE 00:00:00"
 UNTIL="$DATE 23:59:59"
@@ -30,10 +36,24 @@ group() {
   local entries=$(echo "$LOG" | grep -iE "^$label" || true)
   [ -n "$entries" ] && {
     echo "### $label"
-    echo "$entries" | sed -E 's/^([a-z]+)((.*))?:? ?/- /I'
+    echo "$entries" | sed -E 's/^[a-z]+(\([^)]*\))?:? ?/- /I'
     echo
   }
 }
+
+if [ "$DRY_RUN" = "1" ]; then
+  echo "## $DATE"
+  echo
+  group "feat"
+  group "fix"
+  group "perf"
+  group "refactor"
+  group "docs"
+  group "test"
+  group "chore"
+  echo "（dry-run 结束，未写入）"
+  exit 0
+fi
 
 TMP="$(mktemp)"
 {
