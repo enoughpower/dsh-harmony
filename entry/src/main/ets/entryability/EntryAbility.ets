@@ -1,4 +1,4 @@
-import { AbilityConstant, UIAbility, Want, Configuration, ConfigurationConstant } from '@kit.AbilityKit';
+import { AbilityConstant, UIAbility, Want, Configuration } from '@kit.AbilityKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { window } from '@kit.ArkUI';
 
@@ -7,12 +7,10 @@ const TAG = 'DSHHarmony';
 
 /**
  * 主 Ability。
- * - 沉浸式：全屏布局 + 透明系统栏，内容色随系统深浅色
+ * - 窗口保持系统默认（不自定义全屏/系统栏，避免与状态栏重叠或黑边；深色由 dark 资源适配）
  * - 服务卡片点击：解析 want.parameters.dshUrl → AppStorage.pendingDshUrl → Index 消费跳转
  */
 export default class EntryAbility extends UIAbility {
-  private winStage: window.WindowStage | null = null;
-
   onCreate(want: Want, launchParam: AbilityConstant.LaunchParam): void {
     hilog.info(DOMAIN, TAG, 'EntryAbility onCreate. reason=%{public}d', launchParam.launchReason);
     this.consumeCardUrl(want);
@@ -25,10 +23,10 @@ export default class EntryAbility extends UIAbility {
 
   onWindowStageCreate(windowStage: window.WindowStage): void {
     hilog.info(DOMAIN, TAG, 'EntryAbility onWindowStageCreate.');
-    this.winStage = windowStage;
-    // 注意：不启用 setWindowLayoutFullScreen——真机验证全屏后状态栏与内容重叠；
-    // 保持默认布局（内容自动避让状态栏），仅调系统栏内容色跟随深浅色。
-    this.applySystemBarStyle();
+    // 窗口保持系统默认行为（不设全屏、不设透明系统栏）：
+    //   - 全屏会与状态栏内容重叠（真机验证）
+    //   - 透明系统栏在非全屏下露出黑色窗口底色（真机验证）
+    // 状态栏/导航栏按系统默认渲染，深色适配由 dark 资源完成。
     windowStage.loadContent('pages/Index', (err) => {
       if (err.code) {
         hilog.error(DOMAIN, TAG, 'Failed to load pages/Index. code=%{public}d message=%{public}s',
@@ -40,12 +38,11 @@ export default class EntryAbility extends UIAbility {
   }
 
   onConfigurationUpdate(newConfig: Configuration): void {
+    // 深色适配由 dark 资源自动完成，仅记录日志
     hilog.info(DOMAIN, TAG, 'onConfigurationUpdate: colorMode=%{public}d', newConfig.colorMode ?? -1);
-    this.applySystemBarStyle();
   }
 
   onWindowStageDestroy(): void {
-    this.winStage = null;
     hilog.info(DOMAIN, TAG, 'EntryAbility onWindowStageDestroy.');
   }
 
@@ -66,22 +63,4 @@ export default class EntryAbility extends UIAbility {
     }
   }
 
-  /** 系统栏透明 + 内容色跟随深浅色 */
-  private applySystemBarStyle(): void {
-    if (this.winStage === null) {
-      return;
-    }
-    try {
-      const win = this.winStage.getMainWindowSync();
-      const dark = this.context.config.colorMode === ConfigurationConstant.ColorMode.COLOR_MODE_DARK;
-      win.setWindowSystemBarProperties({
-        statusBarColor: '#00000000',
-        navigationBarColor: '#00000000',
-        statusBarContentColor: dark ? '#FFFFFF' : '#1A1A1A',
-        navigationBarContentColor: dark ? '#FFFFFF' : '#1A1A1A'
-      });
-    } catch (e) {
-      hilog.warn(DOMAIN, TAG, 'setWindowSystemBarProperties failed: %{public}s', (e as Error).message);
-    }
-  }
 }
