@@ -10,7 +10,6 @@ A **native HarmonyOS client for DeepSeek Harness**, designed to work with the [d
 - 📷 **Scan to connect**: custom immersive scanner (transparent status bar, WeChat-style gradient scan line, glass ×/flash buttons); scan → validate → open ArkWeb
 - 🧭 **Connection history**: deduped by IP, newest first, swipe-to-delete, tap to open; home keeps the latest entry; manual URL input supported
 - ⚡ **Auto-connect**: with the setting on, each app launch auto-connects the most recent IP (no scan needed)
-- 🎯 **Task monitor / Live View**: Live View capsule appears while a task runs (whale logo + live progress) and collapses on completion; home card and desktop widget stay in sync from the same source; background monitoring keeps running (toggleable)
 - 📥 **Export auto-save**: session-log exports land in the phone's Downloads automatically (zero dialogs; under Downloads/com.dsh.lite/)
 - ⚡ **Latest session at a glance**: home card and desktop widget show the latest session (title / running / turns / steps / relative time; title wraps, tap to refresh)
 - 📇 **Service widget**: desktop widget shows connection status, last-used time and the latest session; tap to open DSH

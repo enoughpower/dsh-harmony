@@ -93,35 +93,6 @@ export class CardSync {
     }
   }
 
-  /** 用 Preferences 会话快照刷新所有已添加卡片（TaskMonitor 每次进度变化调用） */
-  static async updateFormsFromSnapshot(context: common.Context): Promise<void> {
-    const ids = await CardSync.loadIds(context);
-    if (ids.length === 0) {
-      return;
-    }
-    const snap = await AppPrefs.getSessionSnapshot(context);
-    const base = CardSync.defaultData();
-    if (snap.length > 0) {
-      try {
-        const obj = JSON.parse(snap) as Record<string, Object>;
-        const title = String(obj['title'] ?? '');
-        const turns = Number(obj['turns'] ?? 0);
-        const steps = Number(obj['steps'] ?? 0);
-        const running = obj['running'] === true;
-        const updatedAt = Number(obj['updatedAt'] ?? 0);
-        base['sessionTitle'] = title.length > 0 ? title : '（未命名会话）';
-        base['sessionStatus'] = (running ? '进行中 · ' : '已结束 · ') + turns + ' 轮 · ' + steps + ' 步';
-        base['sessionMeta'] = CardSync.relativeLabel(updatedAt);
-      } catch (e) {
-      }
-    }
-    const fd = formBindingData.createFormBindingData(base);
-    for (const formId of ids) {
-      formProvider.updateForm(formId, fd).catch(() => {
-      });
-    }
-  }
-
   /** 用最近连接刷新所有已添加卡片（App 内建立新连接/打开首页时调用） */
   static async syncAll(context: common.Context): Promise<void> {
     const ids = await CardSync.loadIds(context);
@@ -159,27 +130,6 @@ export class CardSync {
       formProvider.updateForm(formId, fd).catch((e: BusinessError) => {
         console.warn('CardSync updateForm failed: ' + e.message);
       });
-    }
-  }
-
-  /** 从快照还原 LatestSessionInfo（首页/小组件读取统一数据源） */
-  static async sessionFromSnapshot(context: common.Context): Promise<LatestSessionInfo | null> {
-    const snap = await AppPrefs.getSessionSnapshot(context);
-    if (snap.length === 0) {
-      return null;
-    }
-    try {
-      const obj = JSON.parse(snap) as Record<string, Object>;
-      const info: LatestSessionInfo = {
-        title: String(obj['title'] ?? ''),
-        updatedAt: Number(obj['updatedAt'] ?? 0),
-        running: obj['running'] === true,
-        turns: Number(obj['turns'] ?? 0),
-        steps: Number(obj['steps'] ?? 0)
-      };
-      return info;
-    } catch (e) {
-      return null;
     }
   }
 

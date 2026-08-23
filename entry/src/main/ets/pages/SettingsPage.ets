@@ -5,7 +5,6 @@ import { hilog } from '@kit.PerformanceAnalysisKit';
 import { BusinessError } from '@kit.BasicServicesKit';
 import { ConnectionStore } from '../common/store/ConnectionStore';
 import { fileIo } from '@kit.CoreFileKit';
-import { TaskMonitor } from '../common/store/TaskMonitor';
 import { util } from '@kit.ArkTS';
 import { AppPrefs } from '../common/store/AppPrefs';
 import { BackButton } from '../components/BackButton';
@@ -26,7 +25,6 @@ struct SettingsPage {
   @State version: string = '1.0.0';
   @State historyCount: number = 0;
   @State autoConnect: boolean = true;
-  @State taskMonitor: boolean = true;
   @State lanPin: string = AppPrefs.DEFAULT_LAN_PIN;
   @State scanning: boolean = false;
   @State discovered: DiscoveredService[] = [];
@@ -37,7 +35,6 @@ struct SettingsPage {
     this.loadHistoryCount();
     this.loadAutoConnect();
     this.loadLanPin();
-    this.loadTaskMonitor();
   }
 
   private loadAutoConnect(): void {
@@ -75,27 +72,6 @@ struct SettingsPage {
     this.store.upsert(ctx, new ConnectionProfile(normalized, UrlUtils.display(normalized, 32))).catch(() => {
     });
     router.pushUrl({ url: 'pages/WebShell', params: { 'url': normalized } });
-  }
-
-  private loadTaskMonitor(): void {
-    const ctx = this.getUIContext().getHostContext() as common.UIAbilityContext;
-    AppPrefs.getBool(ctx, AppPrefs.KEY_TASK_MONITOR, true).then((v: boolean) => {
-      this.taskMonitor = v;
-    }).catch(() => {
-    });
-  }
-
-  private toggleTaskMonitor(checked: boolean): void {
-    this.taskMonitor = checked;
-    const ctx = this.getUIContext().getHostContext() as common.UIAbilityContext;
-    AppPrefs.setBool(ctx, AppPrefs.KEY_TASK_MONITOR, checked).then(() => {
-      this.store.loadAll(ctx).then((list: ConnectionProfile[]) => {
-        const base = list.length > 0 ? list[0].url : '';
-        TaskMonitor.setEnabled(ctx, base, checked);
-      }).catch(() => {
-      });
-    }).catch(() => {
-    });
   }
 
   private loadLanPin(): void {
@@ -271,27 +247,6 @@ struct SettingsPage {
           }
           .width('100%')
           .height(52)
-          .padding({ left: 16, right: 16 })
-          .backgroundColor($r('app.color.card_background'))
-          Row() {
-            Column({ space: 2 }) {
-              Text('任务监听（实况窗）')
-                .fontSize(15)
-                .fontColor($r('app.color.text_primary'))
-              Text('有任务时显示实况窗并实时同步首页/小组件')
-                .fontSize(11)
-                .fontColor($r('app.color.text_secondary'))
-            }
-            .layoutWeight(1)
-            .alignItems(HorizontalAlign.Start)
-            Toggle({ type: ToggleType.Switch, isOn: this.taskMonitor })
-              .selectedColor($r('app.color.primary'))
-              .onChange((checked: boolean) => {
-                this.toggleTaskMonitor(checked);
-              })
-          }
-          .width('100%')
-          .height(56)
           .padding({ left: 16, right: 16 })
           .backgroundColor($r('app.color.card_background'))
           Row() {

@@ -15,10 +15,6 @@ export class AppPrefs {
   static readonly DEFAULT_LAN_PIN: string = '11111111';
   /** dsh-pocket 访问令牌（网页 Cookie 提取/登录所得；供服务卡片复用） */
   static readonly KEY_POCKET_TOKEN: string = 'pocket_token';
-  /** 任务监听开关（默认开）：实况窗 + 后台轮询数据源 */
-  static readonly KEY_TASK_MONITOR: string = 'task_monitor';
-  /** 会话快照（前台服务写入，小组件/首页读取） */
-  static readonly KEY_SESSION_SNAPSHOT: string = 'session_snapshot';
 
   static async getBool(context: common.Context, key: string, def: boolean): Promise<boolean> {
     try {
@@ -50,15 +46,5 @@ export class AppPrefs {
     const pref = await preferences.getPreferences(context, AppConstants.STORE_NAME);
     await pref.put(key, value);
     await pref.flush();
-  }
-
-  /** 写入会话快照（最新会话轻量字段 JSON） */
-  static async setSessionSnapshot(context: common.Context, snapshot: string): Promise<void> {
-    await AppPrefs.setString(context, AppPrefs.KEY_SESSION_SNAPSHOT, snapshot);
-  }
-
-  /** 读取会话快照 JSON（无则空串） */
-  static async getSessionSnapshot(context: common.Context): Promise<string> {
-    return await AppPrefs.getString(context, AppPrefs.KEY_SESSION_SNAPSHOT, '');
   }
 }

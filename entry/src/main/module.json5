@@ -22,16 +22,6 @@
         "name": "ohos.permission.INTERNET"
       },
       {
-        "name": "ohos.permission.KEEP_BACKGROUND_RUNNING",
-        "reason": "$string:background_running_reason",
-        "usedScene": {
-          "abilities": [
-            "EntryAbility"
-          ],
-          "when": "inuse"
-        }
-      },
-      {
         "name": "ohos.permission.GET_NETWORK_INFO"
       },
       {
