@@ -1,6 +1,9 @@
 import { webview } from '@kit.ArkWeb';
-import { router, promptAction } from '@kit.ArkUI';
+import { router, promptAction, uiMaterial } from '@kit.ArkUI';
 import { picker, fileUri, fileIo } from '@kit.CoreFileKit';
+import { photoAccessHelper } from '@kit.MediaLibraryKit';
+import { image } from '@kit.ImageKit';
+import { util } from '@kit.ArkTS';
 import { http } from '@kit.NetworkKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { AppConstants } from '../common/constants/AppConstants';
@@ -101,6 +104,98 @@ struct WebShell {
 
   private backHome(): void {
     router.back();
+  }
+
+  /** 相册选图 → 注入 DSH 输入框（合成 drop 事件，DSH 原生 onDrop 接收为附件） */
+  private pickAndInjectImage(): void {
+    try {
+      const options = new photoAccessHelper.PhotoSelectOptions();
+      options.MIMEType = photoAccessHelper.PhotoViewMIMETypes.IMAGE_TYPE;
+      options.maxSelectNumber = 1;
+      const photoPicker = new photoAccessHelper.PhotoViewPicker();
+      photoPicker.select(options).then((result: photoAccessHelper.PhotoSelectResult) => {
+        const uris = result.photoUris ?? [];
+        if (uris.length === 0) {
+          return;
+        }
+        this.injectImageToWeb(uris[0]);
+      }).catch((e: BusinessError) => {
+        hilog.warn(DOMAIN, TAG, 'photo pick failed: %{public}s', (e as Error).message);
+      });
+    } catch (e) {
+      hilog.warn(DOMAIN, TAG, 'photo pick error: %{public}s', (e as Error).message);
+    }
+  }
+
+  /** 相册图（任意格式）→ ImageKit 转 JPEG(80) → base64 → runJavaScript 构造 File + drop 事件（DSH 单张 ≤20M） */
+  private injectImageToWeb(uri: string): void {
+    const doInject = (b64: string): void => {
+      const name = 'dsh-upload-' + Date.now() + '.jpg';
+      // 页面注入：base64 → File → DataTransfer → 合成 drop（DSH 全局 onDrop 接收为附件）
+      const js = "(function(){" +
+        "try{" +
+        "var b64='" + b64 + "';" +
+        "var name='" + name + "';" +
+        "var bin=atob(b64);" +
+        "var bytes=new Uint8Array(bin.length);" +
+        "for(var i=0;i<bin.length;i++){bytes[i]=bin.charCodeAt(i);}" +
+        "var file=new File([bytes],name,{type:'image/jpeg'});" +
+        "var dt=new DataTransfer();" +
+        "dt.items.add(file);" +
+        "document.dispatchEvent(new DragEvent('drop',{dataTransfer:dt,bubbles:true,cancelable:true}));" +
+        "return 'ok';" +
+        "}catch(e){return 'err:'+e.message;}" +
+        "})()";
+      this.controller.runJavaScript(js).then((ret: string) => {
+        hilog.info(DOMAIN, TAG, 'inject drop: %{public}s', ret);
+      }).catch((e: BusinessError) => {
+        hilog.warn(DOMAIN, TAG, 'runJavaScript failed: %{public}s', e.message);
+      });
+    };
+
+    // media URI 需先以 fd 打开再解码
+    let fp: fileIo.File | null = null;
+    try {
+      fp = fileIo.openSync(uri, fileIo.OpenMode.READ_ONLY);
+    } catch (e) {
+      hilog.warn(DOMAIN, TAG, 'open media failed: %{public}s', (e as Error).message);
+      promptAction.showToast({ message: '图片打开失败' });
+      return;
+    }
+    try {
+      const imgSource = image.createImageSource(fp.fd);
+      imgSource.createPixelMap().then((pm: image.PixelMap) => {
+        const packer = image.createImagePacker();
+        const opts: image.PackingOption = {
+          'format': 'image/jpeg',
+          'quality': 80
+        };
+        packer.packing(pm, opts).then((data: ArrayBuffer) => {
+          try {
+            imgSource.release();
+            packer.release();
+            pm.release();
+            fileIo.closeSync(fp);
+          } catch (e) {
+          }
+          const b64 = new util.Base64Helper().encodeToStringSync(new Uint8Array(data));
+          doInject(b64);
+        }).catch((e: BusinessError) => {
+          hilog.warn(DOMAIN, TAG, 'packing failed: %{public}s', e.message);
+          promptAction.showToast({ message: '图片处理失败' });
+        });
+      }).catch((e: BusinessError) => {
+        hilog.warn(DOMAIN, TAG, 'createPixelMap failed: %{public}s', e.message);
+        promptAction.showToast({ message: '图片解析失败' });
+      });
+    } catch (e) {
+      hilog.warn(DOMAIN, TAG, 'inject image failed: %{public}s', (e as Error).message);
+      try {
+        fileIo.closeSync(fp);
+      } catch (e2) {
+      }
+      promptAction.showToast({ message: '图片读取失败' });
+    }
   }
 
 
@@ -424,7 +519,24 @@ struct WebShell {
               .position({ x: 0, y: 0 })
           }
 
-          // 悬浮按钮已移除（曾拦截网页顶部交互）；物理返回键仍可后退/回首页
+          // 相册图片 → 输入框（右下悬浮，沉浸光感）
+          Button() {
+            SymbolGlyph($r('sys.symbol.ohos_photo'))
+              .fontSize(20)
+              .fontColor([$r('app.color.text_primary')])
+          }
+          .width(44)
+          .height(44)
+          .borderRadius(22)
+          .backgroundColor(Color.Transparent)
+          .systemMaterial(new uiMaterial.ImmersiveMaterial({
+            style: uiMaterial.ImmersiveStyle.ULTRA_THIN,
+            interactive: false
+          }))
+          .position({ x: '80%', y: '86%' })
+          .onClick(() => {
+            this.pickAndInjectImage();
+          })
         }
         .layoutWeight(1)
         .width('100%')
