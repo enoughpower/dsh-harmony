@@ -3,20 +3,18 @@ name: CI
 # DSH Harmony 持续集成
 #
 # 构建环境：华为官方「HarmonyOS 独立命令行工具包」（内嵌 SDK，无需 DevEco IDE）。
-#   下载地址（需登录华为账号复制直链）：https://developer.huawei.com/consumer/cn/download/command-line-tools-for-hmos
-#   注意：工具包版本必须与工程 SDK 版本匹配，下载中心按版本列出。
+#   工具链 zip 分卷发布（GitHub 单文件 2GiB 上限）：主包 .zip + .z01/.z02/...，各 ≤1GiB。
+#   CLT_URL 指向主包 URL，workflow 自动下载全部卷并合并（zip -s 0）后解压。
+#   **工具链解压后经 actions/cache 缓存**（~7G，单条 cache 上限 10G）：首次下载缓存，
+#   之后每次 CI 秒级恢复，避免反复下载 3.5GB 分卷。
 #
 # 配置（二选一）：
 #   1. workflow_dispatch 手动运行时在输入框粘贴直链（最省事，首次推荐）
-#   2. 设置 repository variables：CLT_URL（直链）、CLT_SHA256（可选，完整性校验）
-#
-# 工具链发布：zip 可能超 GitHub 单文件 2GiB 上限 → 以 zip 分卷发布
-#   （主包 .zip + .z01/.z02/...，各 ≤1GiB）。CLT_URL 指向主包 URL，
-#   本 workflow 自动下载全部卷并合并（zip -s 0）后解压。
+#   2. 设置 repository variables：CLT_URL（直链）、CLT_SHA256（可选）
 #
 # 触发：
 #   - push / PR：debug 构建验证（不上传安装包）
-#   - tag v*：release 构建 + 签名（secrets）+ GitHub Release 发布正式安装包（唯一产出安装包的节点）
+#   - tag v*：release 构建 + 签名（secrets）+ GitHub Release 发布正式安装包
 
 on:
   push:
@@ -41,7 +39,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install HarmonyOS command-line tools
+      - name: Restore toolchain cache
+        id: clt-cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/harmony-clt/command-line-tools
+          key: harmony-clt-26-v1
+
+      - name: Install HarmonyOS command-line tools (cache miss)
+        if: steps.clt-cache.outputs.cache-hit != 'true'
         env:
           CLT_DIR: ${{ runner.temp }}/harmony-clt
           CLT_URL_INPUT: ${{ github.event.inputs.clt_url }}
@@ -54,7 +60,6 @@ jobs:
           SHA="${CLT_SHA_INPUT:-${CLT_SHA_VAR:-}}"
           if [ -z "$URL" ]; then
             echo "::error::未配置 Command Line Tools 直链。请用 workflow_dispatch 输入或设置 repository variable CLT_URL"
-            echo "下载页: https://developer.huawei.com/consumer/cn/download/command-line-tools-for-hmos"
             exit 1
           fi
           mkdir -p "$CLT_DIR"
@@ -74,9 +79,7 @@ jobs:
           else
             mv pkg.zip clt.zip
           fi
-          if [ -n "$SHA" ]; then
-            echo "$SHA  $CLT_DIR/clt.zip" | sha256sum -c -
-          fi
+          if [ -n "$SHA" ]; then echo "$SHA  $CLT_DIR/clt.zip" | sha256sum -c -; fi
           unzip -q "$CLT_DIR/clt.zip" -d "$CLT_DIR"
           ls "$CLT_DIR"
 
@@ -105,7 +108,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install HarmonyOS command-line tools
+      - name: Restore toolchain cache
+        id: clt-cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/harmony-clt/command-line-tools
+          key: harmony-clt-26-v1
+
+      - name: Install HarmonyOS command-line tools (cache miss)
+        if: steps.clt-cache.outputs.cache-hit != 'true'
         env:
           CLT_DIR: ${{ runner.temp }}/harmony-clt
           CLT_URL_INPUT: ${{ github.event.inputs.clt_url }}
