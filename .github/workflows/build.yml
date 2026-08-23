@@ -63,23 +63,10 @@ jobs:
             exit 1
           fi
           mkdir -p "$CLT_DIR"
-          # 并行下载主包 + 各卷（GitHub runner 单连接限速，并行显著提速）
-          curl -fsSL -o "$CLT_DIR/pkg.zip" "$URL" &
-          for vol in 1 2 3 4 5 6 7 8; do
-            n=$(printf "%02d" $vol)
-            curl -fsSL -o "$CLT_DIR/pkg.zip.z$n" "${URL%.zip}.z$n" &
-          done
-          wait || true
-          # 清理失败/多余小卷
-          find "$CLT_DIR" -maxdepth 1 -name "pkg.zip.z*" -size -1M -delete 2>/dev/null || true
-          cd "$CLT_DIR"
-          if ls pkg.zip.z* >/dev/null 2>&1; then
-            zip -s 0 pkg.zip --out clt.zip
-          else
-            mv pkg.zip clt.zip
-          fi
-          if [ -n "$SHA" ]; then echo "$SHA  $CLT_DIR/clt.zip" | sha256sum -c -; fi
-          unzip -q "$CLT_DIR/clt.zip" -d "$CLT_DIR"
+          # 单文件 .tar.zst（1.96GiB，<2GiB 单文件上限）：直接下载 + zstd 解压，免分卷
+          curl -fsSL -o "$CLT_DIR/clt.tgz" "$URL"
+          if [ -n "$SHA" ]; then echo "$SHA  $CLT_DIR/clt.tgz" | sha256sum -c -; fi
+          tar --zstd -xf "$CLT_DIR/clt.tgz" -C "$CLT_DIR"
           ls "$CLT_DIR"
 
       - name: Install dependencies
@@ -128,23 +115,10 @@ jobs:
           SHA="${CLT_SHA_INPUT:-${CLT_SHA_VAR:-}}"
           [ -n "$URL" ] || { echo "::error::CLT_URL 未配置"; exit 1; }
           mkdir -p "$CLT_DIR"
-          # 并行下载主包 + 各卷（GitHub runner 单连接限速，并行显著提速）
-          curl -fsSL -o "$CLT_DIR/pkg.zip" "$URL" &
-          for vol in 1 2 3 4 5 6 7 8; do
-            n=$(printf "%02d" $vol)
-            curl -fsSL -o "$CLT_DIR/pkg.zip.z$n" "${URL%.zip}.z$n" &
-          done
-          wait || true
-          # 清理失败/多余小卷
-          find "$CLT_DIR" -maxdepth 1 -name "pkg.zip.z*" -size -1M -delete 2>/dev/null || true
-          cd "$CLT_DIR"
-          if ls pkg.zip.z* >/dev/null 2>&1; then
-            zip -s 0 pkg.zip --out clt.zip
-          else
-            mv pkg.zip clt.zip
-          fi
-          if [ -n "$SHA" ]; then echo "$SHA  $CLT_DIR/clt.zip" | sha256sum -c -; fi
-          unzip -q "$CLT_DIR/clt.zip" -d "$CLT_DIR"
+          # 单文件 .tar.zst（1.96GiB，<2GiB 单文件上限）：直接下载 + zstd 解压，免分卷
+          curl -fsSL -o "$CLT_DIR/clt.tgz" "$URL"
+          if [ -n "$SHA" ]; then echo "$SHA  $CLT_DIR/clt.tgz" | sha256sum -c -; fi
+          tar --zstd -xf "$CLT_DIR/clt.tgz" -C "$CLT_DIR"
 
       - name: Install dependencies
         env:
