@@ -10,6 +10,9 @@ struct WidgetCard {
   @LocalStorageProp('lastUrl') lastUrl: string = '';
   @LocalStorageProp('online') online: string = 'unknown';
   @LocalStorageProp('lastUsedLabel') lastUsedLabel: string = '';
+  @LocalStorageProp('sessionTitle') sessionTitle: string = '';
+  @LocalStorageProp('sessionStatus') sessionStatus: string = '';
+  @LocalStorageProp('sessionMeta') sessionMeta: string = '';
 
   @Builder
   StatusLine() {
@@ -42,8 +45,18 @@ struct WidgetCard {
     .width('100%')
   }
 
+  private onlineStateText(): string {
+    if (this.online === 'online') {
+      return '在线';
+    }
+    if (this.online === 'offline') {
+      return '离线';
+    }
+    return '未检测';
+  }
+
   build() {
-    Column({ space: 5 }) {
+    Column({ space: 4 }) {
       Row() {
         Text(this.appName)
           .fontSize(14)
@@ -55,14 +68,35 @@ struct WidgetCard {
       }
       .width('100%')
 
-      Text(this.lastUrlDisplay)
-        .fontSize(12)
-        .fontColor('#8A8F99')
-        .maxLines(2)
-        .textOverflow({ overflow: TextOverflow.Ellipsis })
-        .width('100%')
-
-      this.StatusLine()
+      if (this.sessionTitle.length > 0) {
+        Text(this.sessionTitle)
+          .fontSize(12)
+          .fontWeight(FontWeight.Bold)
+          .fontColor('#1A1A1A')
+          .maxLines(2)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+          .width('100%')
+        Text(this.sessionStatus)
+          .fontSize(10)
+          .fontColor('#1A1A1A')
+          .maxLines(1)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+          .width('100%')
+        Text(this.sessionMeta + ' · ' + this.onlineStateText())
+          .fontSize(10)
+          .fontColor('#8A8F99')
+          .maxLines(1)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+          .width('100%')
+      } else {
+        Text(this.lastUrlDisplay)
+          .fontSize(12)
+          .fontColor('#8A8F99')
+          .maxLines(2)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+          .width('100%')
+        this.StatusLine()
+      }
 
       Blank()
 

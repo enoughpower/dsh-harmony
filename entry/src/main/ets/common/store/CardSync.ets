@@ -6,6 +6,8 @@ import { ConnectionStore } from './ConnectionStore';
 import { ConnectionProfile } from '../../model/ConnectionProfile';
 import { AppConstants } from '../constants/AppConstants';
 import { LanDiscovery } from '../utils/LanDiscovery';
+import { AppPrefs } from './AppPrefs';
+import { PocketApi, LatestSessionInfo } from '../utils/PocketApi';
 
 /**
  * 服务卡片同步：管理已添加卡片的 formId 列表，并在连接变化时刷新卡片数据。
@@ -21,7 +23,10 @@ export class CardSync {
       'lastUrl': '',
       'lastUrlDisplay': '扫码连接 DSH',
       'online': 'unknown',
-      'lastUsedLabel': ''
+      'lastUsedLabel': '',
+      'sessionTitle': '',
+      'sessionStatus': '',
+      'sessionMeta': ''
     };
   }
 
@@ -50,7 +55,8 @@ export class CardSync {
   }
 
   /** 由最近连接生成卡片数据（含在线状态与相对时间）。在线探测失败按 unknown 呈现。 */
-  static dataFrom(list: ConnectionProfile[], online: boolean = false, known: boolean = true): Record<string, string> {
+  static dataFrom(list: ConnectionProfile[], online: boolean = false, known: boolean = true,
+    session: LatestSessionInfo | null = null): Record<string, string> {
     const base = CardSync.defaultData();
     if (list.length > 0) {
       const p = list[0];
@@ -58,6 +64,11 @@ export class CardSync {
       base['lastUrlDisplay'] = p.url.replace(/^https?:\/\//i, '');
       base['lastUsedLabel'] = CardSync.relativeLabel(p.lastUsedAt);
       base['online'] = known ? (online ? 'online' : 'offline') : 'unknown';
+    }
+    if (session !== null) {
+      base['sessionTitle'] = session.title.length > 0 ? session.title : '（未命名会话）';
+      base['sessionStatus'] = (session.running ? '进行中 · ' : '已结束 · ') + session.turns + ' 轮 · ' + session.steps + ' 步';
+      base['sessionMeta'] = CardSync.relativeLabel(session.updatedAt);
     }
     return base;
   }
@@ -99,7 +110,21 @@ export class CardSync {
         known = false;
       }
     }
-    const data = CardSync.dataFrom(list, online, known);
+    // 最新会话（用 App 保存的令牌；无令牌/失败则留空）
+    let session: LatestSessionInfo | null = null;
+    if (list.length > 0) {
+      try {
+        const token = await AppPrefs.getString(context, AppPrefs.KEY_POCKET_TOKEN, '');
+        if (token.length > 0) {
+          const q = await PocketApi.queryWithToken(list[0].url, token);
+          if (q.info !== null) {
+            session = q.info;
+          }
+        }
+      } catch (e) {
+      }
+    }
+    const data = CardSync.dataFrom(list, online, known, session);
     const fd = formBindingData.createFormBindingData(data);
     for (const formId of ids) {
       formProvider.updateForm(formId, fd).catch((e: BusinessError) => {

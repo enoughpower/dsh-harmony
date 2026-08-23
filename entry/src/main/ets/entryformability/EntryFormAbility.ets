@@ -6,6 +6,8 @@ import { ConnectionStore } from '../common/store/ConnectionStore';
 import { ConnectionProfile } from '../model/ConnectionProfile';
 import { CardSync } from '../common/store/CardSync';
 import { LanDiscovery } from '../common/utils/LanDiscovery';
+import { AppPrefs } from '../common/store/AppPrefs';
+import { PocketApi, LatestSessionInfo } from '../common/utils/PocketApi';
 
 const DOMAIN = 0x0000;
 const TAG = 'DSHHarmony';
@@ -52,7 +54,21 @@ export default class EntryFormAbility extends FormExtensionAbility {
           known = false;
         }
       }
-      const fd = formBindingData.createFormBindingData(CardSync.dataFrom(list, online, known));
+      // 最新会话（复用 App 保存的令牌；失败留空）
+      let session: LatestSessionInfo | null = null;
+      if (list.length > 0) {
+        try {
+          const token = await AppPrefs.getString(this.context, AppPrefs.KEY_POCKET_TOKEN, '');
+          if (token.length > 0) {
+            const q = await PocketApi.queryWithToken(list[0].url, token);
+            if (q.info !== null) {
+              session = q.info;
+            }
+          }
+        } catch (e) {
+        }
+      }
+      const fd = formBindingData.createFormBindingData(CardSync.dataFrom(list, online, known, session));
       if (formId.length > 0) {
         formProvider.updateForm(formId, fd).catch((e: BusinessError) => {
           hilog.warn(DOMAIN, TAG, 'updateForm %{public}s failed: %{public}s', formId, e.message);

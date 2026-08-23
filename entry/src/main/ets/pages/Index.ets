@@ -1,6 +1,8 @@
 import { scanBarcode, scanCore } from '@kit.ScanKit';
 import { abilityAccessCtrl, common, Permissions } from '@kit.AbilityKit';
 import { router } from '@kit.ArkUI';
+import { fileIo } from '@kit.CoreFileKit';
+import { util } from '@kit.ArkTS';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { BusinessError } from '@kit.BasicServicesKit';
 import { ConnectionProfile } from '../model/ConnectionProfile';
@@ -12,6 +14,7 @@ import { CardSync } from '../common/store/CardSync';
 import { LanDiscovery, DiscoveredService } from '../common/utils/LanDiscovery';
 import { AppPrefs } from '../common/store/AppPrefs';
 import { WindowBar } from '../common/utils/WindowBar';
+import { PocketApi, LatestSessionInfo, SessionQueryResult } from '../common/utils/PocketApi';
 
 const DOMAIN = 0x0000;
 const TAG = 'DSHHarmony';
@@ -28,6 +31,9 @@ struct Index {
   @State scanning: boolean = false;
   @State discovered: DiscoveredService[] = [];
   @State autoScanEnabled: boolean = true;
+  @State latestSession: LatestSessionInfo | null = null;
+  @State sessionLoading: boolean = false;
+  @State sessionError: string = '';
   private store: ConnectionStore = new ConnectionStore();
   /** 会话内是否已自动扫描过（防止 WebShell 返回时重复扫/自动拉回） */
   private autoScanned: boolean = false;
@@ -60,6 +66,8 @@ struct Index {
     CardSync.syncAll(synCtx).catch((e: BusinessError) => {
       hilog.warn(DOMAIN, TAG, 'card syncAll failed: %{public}s', e.message);
     });
+    // 最新会话卡片（首页展示）
+    this.refreshSession();
     // 服务卡片点击直达：消费 pendingDshUrl 并跳转 WebShell
     const pending = AppStorage.get<string>('pendingDshUrl');
     if (pending !== undefined && pending !== null && pending.length > 0) {
@@ -102,6 +110,71 @@ struct Index {
       hilog.warn(DOMAIN, TAG, 'save connection failed: %{public}s', e.message);
     });
     router.pushUrl({ url: 'pages/WebShell', params: { 'url': url } });
+  }
+
+  /** 拉取最新会话（首页展示；LAN PIN 登录 + session.list） */
+  /** 追加调试日志到沙箱文件（pocket-debug.log，hdc 可读） */
+  private logDebug(context: common.Context, msg: string): void {
+    try {
+      const path = context.filesDir + '/pocket-debug.log';
+      let content = '';
+      if (fileIo.accessSync(path)) {
+        const rf = fileIo.openSync(path, fileIo.OpenMode.READ_WRITE);
+        const buf = new ArrayBuffer(8192);
+        const n = fileIo.readSync(rf.fd, buf);
+        content = n > 0 ? util.TextDecoder.create('utf-8').decodeToString(new Uint8Array(buf, 0, n)) : '';
+        fileIo.closeSync(rf);
+      }
+      content = content + new Date().toString() + ' ' + msg + '\n';
+      // 保留最近 64KB
+      if (content.length > 65536) {
+        content = content.slice(content.length - 65536);
+      }
+      const wf = fileIo.openSync(path, fileIo.OpenMode.READ_WRITE | fileIo.OpenMode.CREATE);
+      fileIo.writeSync(wf.fd, content);
+      fileIo.closeSync(wf);
+    } catch (e) {
+    }
+  }
+
+  private refreshSession(): void {
+    if (this.sessionLoading) {
+      return;
+    }
+    this.sessionLoading = true;
+    const ctx = this.getUIContext().getHostContext() as common.UIAbilityContext;
+    this.logDebug(ctx, 'refreshSession start');
+    this.store.loadAll(ctx).then((list: ConnectionProfile[]) => {
+      this.logDebug(ctx, 'history count=' + list.length);
+      if (list.length === 0) {
+        this.sessionLoading = false;
+        this.latestSession = null;
+        this.sessionError = '';
+        this.logDebug(ctx, 'no history, skip');
+        return;
+      }
+      this.logDebug(ctx, 'target url=' + list[0].url);
+      AppPrefs.getString(ctx, AppPrefs.KEY_LAN_PIN, AppPrefs.DEFAULT_LAN_PIN).then((pin: string) => {
+        this.logDebug(ctx, 'pin=' + pin);
+        return PocketApi.latestSession(list[0].url, pin);
+      }).catch(() => {
+        const fb: SessionQueryResult = { info: null, error: 'PocketApi 异常', token: '' };
+        return fb;
+      }).then((query: SessionQueryResult) => {
+        this.logDebug(ctx, 'result info=' + (query.info !== null ? query.info.title : 'null') + ' error=' + query.error);
+        this.latestSession = query.info;
+        this.sessionError = query.error;
+        this.sessionLoading = false;
+        // 保存令牌供服务卡片复用
+        if (query.token.length > 0) {
+          AppPrefs.setString(ctx, AppPrefs.KEY_POCKET_TOKEN, query.token).catch(() => {
+          });
+        }
+      });
+    }).catch((e: BusinessError) => {
+      this.logDebug(ctx, 'loadAll failed: ' + e.message);
+      this.sessionLoading = false;
+    });
   }
 
   private removeConnection(url: string): void {
@@ -219,6 +292,76 @@ struct Index {
   }
 
   @Builder
+  LatestSessionCard() {
+    Column({ space: 10 }) {
+      Row() {
+        Text('最新会话')
+          .fontSize(14)
+          .fontWeight(FontWeight.Medium)
+          .fontColor($r('app.color.text_secondary'))
+          .layoutWeight(1)
+        if (this.sessionLoading) {
+          LoadingProgress()
+            .width(16)
+            .height(16)
+        } else {
+          Text('刷新')
+            .fontSize(13)
+            .fontColor($r('app.color.primary'))
+            .onClick(() => {
+              this.refreshSession();
+            })
+        }
+      }
+      .width('100%')
+
+      if (this.latestSession !== null) {
+        Text(this.latestSession!.title.length > 0 ? this.latestSession!.title : '（未命名会话）')
+          .fontSize(17)
+          .fontWeight(FontWeight.Bold)
+          .fontColor($r('app.color.text_primary'))
+          .maxLines(2)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+          .alignSelf(ItemAlign.Start)
+        Row({ space: 10 }) {
+          Text(this.latestSession!.running ? '● 进行中' : '● 已结束')
+            .fontSize(12)
+            .fontColor(this.latestSession!.running ? $r('app.color.primary') : $r('app.color.text_secondary'))
+          Text(this.latestSession!.turns + ' 轮 · ' + this.latestSession!.steps + ' 步')
+            .fontSize(12)
+            .fontColor($r('app.color.text_secondary'))
+          Text(CardSync.relativeLabel(this.latestSession!.updatedAt))
+            .fontSize(12)
+            .fontColor($r('app.color.text_secondary'))
+        }
+        .alignSelf(ItemAlign.Start)
+      } else {
+        Text(this.sessionLoading ? '正在获取…' : '未获取到会话数据')
+          .fontSize(13)
+          .fontColor($r('app.color.text_secondary'))
+          .alignSelf(ItemAlign.Start)
+        if (this.sessionError.length > 0 && !this.sessionLoading) {
+          Text(this.sessionError)
+            .fontSize(11)
+            .fontColor($r('app.color.text_secondary'))
+            .alignSelf(ItemAlign.Start)
+            .maxLines(2)
+            .textOverflow({ overflow: TextOverflow.Ellipsis })
+        }
+      }
+    }
+    .width('100%')
+    .padding(16)
+    .backgroundColor($r('app.color.card_background'))
+    .borderRadius($r('app.float.card_corner_radius'))
+    .onClick(() => {
+      if (!this.sessionLoading) {
+        this.refreshSession();
+      }
+    })
+  }
+
+  @Builder
   ActionButtons() {
     Column({ space: 12 }) {
       Button('扫码连接')
@@ -283,6 +426,8 @@ struct Index {
   MainContent() {
     Column({ space: 16 }) {
       this.Header()
+
+      this.LatestSessionCard()
 
       List({ space: 12 }) {
         ForEach(this.connections, (item: ConnectionProfile) => {

@@ -19,12 +19,14 @@ struct SettingsPage {
   @State version: string = '1.0.0';
   @State historyCount: number = 0;
   @State autoScan: boolean = true;
+  @State lanPin: string = AppPrefs.DEFAULT_LAN_PIN;
   private store: ConnectionStore = new ConnectionStore();
 
   aboutToAppear(): void {
     this.loadVersion();
     this.loadHistoryCount();
     this.loadAutoScan();
+    this.loadLanPin();
   }
 
   private loadAutoScan(): void {
@@ -32,6 +34,22 @@ struct SettingsPage {
     AppPrefs.getBool(ctx, AppPrefs.KEY_AUTO_DISCOVER, true).then((v: boolean) => {
       this.autoScan = v;
     }).catch(() => {
+    });
+  }
+
+  private loadLanPin(): void {
+    const ctx = this.getUIContext().getHostContext() as common.UIAbilityContext;
+    AppPrefs.getString(ctx, AppPrefs.KEY_LAN_PIN, AppPrefs.DEFAULT_LAN_PIN).then((v: string) => {
+      this.lanPin = v;
+    }).catch(() => {
+    });
+  }
+
+  private saveLanPin(input: string): void {
+    const v = input.trim();
+    this.lanPin = v;
+    const ctx = this.getUIContext().getHostContext() as common.UIAbilityContext;
+    AppPrefs.setString(ctx, AppPrefs.KEY_LAN_PIN, v.length > 0 ? v : AppPrefs.DEFAULT_LAN_PIN).catch(() => {
     });
   }
 
@@ -133,28 +151,45 @@ struct SettingsPage {
       Column({ space: 8 }) {
         this.SectionTitle('连接')
         Column({ space: 1 }) {
-        this.RowItem('连接历史（' + this.historyCount + ' 条）', () => {
-          this.clearHistory();
-        })
-        Row() {
-          Text('打开时自动扫描局域网')
-            .fontSize(15)
-            .fontColor($r('app.color.text_primary'))
-            .layoutWeight(1)
-          Toggle({ type: ToggleType.Switch, isOn: this.autoScan })
-            .selectedColor($r('app.color.primary'))
-            .onChange((checked: boolean) => {
-              this.toggleAutoScan(checked);
-            })
+          this.RowItem('连接历史（' + this.historyCount + ' 条）', () => {
+            this.clearHistory();
+          })
+          Row() {
+            Text('打开时自动扫描局域网')
+              .fontSize(15)
+              .fontColor($r('app.color.text_primary'))
+              .layoutWeight(1)
+            Toggle({ type: ToggleType.Switch, isOn: this.autoScan })
+              .selectedColor($r('app.color.primary'))
+              .onChange((checked: boolean) => {
+                this.toggleAutoScan(checked);
+              })
+          }
+          .width('100%')
+          .height(52)
+          .padding({ left: 16, right: 16 })
+          .backgroundColor($r('app.color.card_background'))
+          Row({ space: 12 }) {
+            Text('局域网 PIN')
+              .fontSize(15)
+              .fontColor($r('app.color.text_primary'))
+            TextInput({ text: this.lanPin, placeholder: AppPrefs.DEFAULT_LAN_PIN })
+              .type(InputType.NUMBER_PASSWORD)
+              .maxLength(16)
+              .layoutWeight(1)
+              .fontSize(15)
+              .onChange((v: string) => {
+                this.saveLanPin(v);
+              })
+          }
+          .width('100%')
+          .height(52)
+          .padding({ left: 16, right: 16 })
+          .backgroundColor($r('app.color.card_background'))
         }
         .width('100%')
-        .height(52)
-        .padding({ left: 16, right: 16 })
-        .backgroundColor($r('app.color.card_background'))
-      }
-        .width('100%')
-      .borderRadius($r('app.float.card_corner_radius'))
-      .clip(true)
+        .borderRadius($r('app.float.card_corner_radius'))
+        .clip(true)
       }
 
       Column({ space: 8 }) {
