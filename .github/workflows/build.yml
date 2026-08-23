@@ -4,20 +4,19 @@ name: CI
 #
 # 构建环境：华为官方「HarmonyOS 独立命令行工具包」（内嵌 SDK，无需 DevEco IDE）。
 #   下载地址（需登录华为账号复制直链）：https://developer.huawei.com/consumer/cn/download/command-line-tools-for-hmos
-#   注意：工具包版本必须与工程 SDK 版本（7.0.1(25)）匹配，下载中心按版本列出。
+#   注意：工具包版本必须与工程 SDK 版本匹配，下载中心按版本列出。
 #
 # 配置（二选一）：
 #   1. workflow_dispatch 手动运行时在输入框粘贴直链（最省事，首次推荐）
 #   2. 设置 repository variables：CLT_URL（直链）、CLT_SHA256（可选，完整性校验）
 #
+# 工具链发布：zip 可能超 GitHub 单文件 2GiB 上限 → 以 zip 分卷发布
+#   （主包 .zip + .z01/.z02/...，各 ≤1GiB）。CLT_URL 指向主包 URL，
+#   本 workflow 自动下载全部卷并合并（zip -s 0）后解压。
+#
 # 触发：
 #   - push / PR：debug 构建验证（不上传安装包）
 #   - tag v*：release 构建 + 签名（secrets）+ GitHub Release 发布正式安装包（唯一产出安装包的节点）
-#
-# 签名 secrets（可选，tag 构建自动签名）：
-#   SIGNING_KEY / SIGNING_CERT / SIGNING_PROFILE  （p12/cer/p7b 的 base64）
-#   KEYSTORE_PASSWORD / KEY_PASSWORD / KEY_ALIAS
-# 生成方式：DevEco Studio 登录华为账号自动签名后，把签名文件 base64 填入 secrets。
 
 on:
   push:
@@ -59,7 +58,22 @@ jobs:
             exit 1
           fi
           mkdir -p "$CLT_DIR"
-          curl -fsSL -o "$CLT_DIR/clt.zip" "$URL"
+          curl -fsSL -o "$CLT_DIR/pkg.zip" "$URL"
+          for vol in 1 2 3 4 5 6 7 8; do
+            n=$(printf "%02d" $vol)
+            if curl -fsSL -o "$CLT_DIR/pkg.zip.z$n" "${URL%.zip}.z$n"; then
+              echo "downloaded volume z$n"
+            else
+              rm -f "$CLT_DIR/pkg.zip.z$n"
+              break
+            fi
+          done
+          cd "$CLT_DIR"
+          if ls pkg.zip.z* >/dev/null 2>&1; then
+            zip -s 0 pkg.zip --out clt.zip
+          else
+            mv pkg.zip clt.zip
+          fi
           if [ -n "$SHA" ]; then
             echo "$SHA  $CLT_DIR/clt.zip" | sha256sum -c -
           fi
@@ -104,7 +118,22 @@ jobs:
           SHA="${CLT_SHA_INPUT:-${CLT_SHA_VAR:-}}"
           [ -n "$URL" ] || { echo "::error::CLT_URL 未配置"; exit 1; }
           mkdir -p "$CLT_DIR"
-          curl -fsSL -o "$CLT_DIR/clt.zip" "$URL"
+          curl -fsSL -o "$CLT_DIR/pkg.zip" "$URL"
+          for vol in 1 2 3 4 5 6 7 8; do
+            n=$(printf "%02d" $vol)
+            if curl -fsSL -o "$CLT_DIR/pkg.zip.z$n" "${URL%.zip}.z$n"; then
+              echo "downloaded volume z$n"
+            else
+              rm -f "$CLT_DIR/pkg.zip.z$n"
+              break
+            fi
+          done
+          cd "$CLT_DIR"
+          if ls pkg.zip.z* >/dev/null 2>&1; then
+            zip -s 0 pkg.zip --out clt.zip
+          else
+            mv pkg.zip clt.zip
+          fi
           if [ -n "$SHA" ]; then echo "$SHA  $CLT_DIR/clt.zip" | sha256sum -c -; fi
           unzip -q "$CLT_DIR/clt.zip" -d "$CLT_DIR"
 
