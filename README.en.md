@@ -8,12 +8,12 @@ A **native HarmonyOS client for DeepSeek Harness**, designed to work with the [d
 ## Features
 
 - 📷 **Scan to connect**: ScanKit system scan UI (album scanning included); scan → validate → open ArkWeb
-- 🔌 **dsh-pocket ready**: LAN (`http://IP:3081`) and public (cloudflared tunnel) addresses both supported
-- 📱 **Adaptive layouts**: single column on narrow phones; foldable-expanded / tablet landscape automatically switches to a "side panel + Web" two-column layout
 - 🧭 **Connection history**: last 20 entries, long-press to delete, one-tap reconnect; manual URL input supported
+- 📥 **Export auto-save**: session-log exports land in the phone's Downloads automatically (zero dialogs; under Downloads/com.dsh.lite/)
+- ⚡ **Latest session at a glance**: home card and desktop widget show the latest session (title / running / turns / steps / relative time; title wraps, tap to refresh)
+- 📇 **Service widget**: desktop widget shows connection status, last-used time and the latest session; tap to open DSH
 - 🛡️ **Privacy-friendly**: only connection URLs are stored; PINs/credentials never persisted; one-tap clear for web data and history
 - 🔧 **Full toolchain**: CLI build / on-device smoke tests / Hypium unit tests / GitHub Actions CI
-
 ## How it works
 
 ```

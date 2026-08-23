@@ -3,6 +3,22 @@
 ## 2026-08-23
 
 ### feat
+- 网页导出会话日志自动保存到系统下载目录（picker DOWNLOAD 模式：零弹窗、持久化授权 URI，落在 下载/<包名>/）
+- 首页新增「最新会话」卡片（标题/进行中/轮次/步骤/相对时间，点击刷新）；服务卡片（桌面小组件）同样展示最新会话（标题自动换行 + 状态两行）
+- 设置页新增「局域网 PIN」配置项（默认 11111111，dsh-pocket 自定义 PIN 可同步修改）
+- 服务卡片（ConnectionCard）升级：连接状态 + 最近使用时间；新增沉浸式返回按钮 BackButton 与统一系统栏 WindowBar
+
+### fix
+- 下载链路多轮排障：request 下载服务在 ArkWeb 回调内 Native 崩溃 → 权限弹窗静默挂起 → 改手动 HTTP（带 Web Cookie）→ DOWNLOAD 模式公共目录直写（沙箱兜底）
+- 服务卡片与 Form 扩展接入最新会话查询（复用 App 保存的访问令牌；无令牌/失败回退原布局）
+
+### ci
+- 安装包只在 tag(v*) 节点产出：push/PR 仅构建验证不再上传 debug 包，正式安装包经 GitHub Release 发布
+
+### docs
+- 排查记录 dsh-pocket「文件浏览」依赖宿主缺失的 aionui explorer 列（上游 issue #48，已提交）
+
+### feat
 - 项目脚手架：基于 Empty Ability 模板初始化 DSH Harmony 工程（com.dsh.lite）
 - 首页：连接历史列表 + 扫码连接（ScanKit 系统默认界面）+ 手动输入地址
 - WebShell：ArkWeb 套壳页，加载 dsh-pocket 网页，窄屏/宽屏（折叠屏展开、平板）自适应双栏布局
