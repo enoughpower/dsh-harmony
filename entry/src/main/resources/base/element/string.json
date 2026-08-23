@@ -21,6 +21,11 @@
       "value": "用于把导出的文件保存到系统下载文件夹"
     },
     {
+      "name": "background_running_reason",
+      "value": "用于后台监听 DSH 任务进度并实时同步实况窗与小组件"
+    },
+
+    {
       "name": "EntryFormAbility_label",
       "value": "DSH 快捷连接"
     },

@@ -13,6 +13,7 @@ import { CardSync } from '../common/store/CardSync';
 import { AppPrefs } from '../common/store/AppPrefs';
 import { WindowBar } from '../common/utils/WindowBar';
 import { PocketApi, LatestSessionInfo, SessionQueryResult } from '../common/utils/PocketApi';
+import { AppSessionState } from '../common/store/AppSessionState';
 
 const DOMAIN = 0x0000;
 const TAG = 'DSHHarmony';
@@ -35,6 +36,8 @@ struct Index {
   private autoConnected: boolean = false;
   /** 开关配置是否已读取完成（避免异步竞态导致未读到的默认值参与判定） */
   private autoConnectReady: boolean = false;
+  /** 会话状态订阅句柄 */
+  private sessionUnsub: (() => void) | null = null;
   private dialogController: CustomDialogController = new CustomDialogController({
     builder: UrlInputDialog({
       onConfirm: (url: string) => {
@@ -67,7 +70,19 @@ struct Index {
     CardSync.syncAll(synCtx).catch((e: BusinessError) => {
       hilog.warn(DOMAIN, TAG, 'card syncAll failed: %{public}s', e.message);
     });
-    // 最新会话卡片（首页展示）
+    // 最新会话卡片：优先用统一数据源（快照 + 实时订阅；监听关闭时仅主动刷新）
+    CardSync.sessionFromSnapshot(barCtx).then((info: LatestSessionInfo | null) => {
+      if (info !== null) {
+        this.latestSession = info;
+      }
+    }).catch(() => {
+    });
+    if (this.sessionUnsub === null) {
+      this.sessionUnsub = AppSessionState.subscribe((info: LatestSessionInfo | null) => {
+        this.latestSession = info;
+        this.sessionError = '';
+      });
+    }
     this.refreshSession();
     // 服务卡片点击直达：消费 pendingDshUrl 并跳转 WebShell
     const pending = AppStorage.get<string>('pendingDshUrl');
@@ -92,6 +107,13 @@ struct Index {
       }
     }).catch(() => {
     });
+  }
+
+  onPageHide(): void {
+    if (this.sessionUnsub !== null) {
+      this.sessionUnsub();
+      this.sessionUnsub = null;
+    }
   }
 
   private reloadHistory(): void {
@@ -177,6 +199,9 @@ struct Index {
         this.latestSession = query.info;
         this.sessionError = query.error;
         this.sessionLoading = false;
+        if (query.info !== null) {
+          AppSessionState.update(query.info);
+        }
         // 保存令牌供服务卡片复用
         if (query.token.length > 0) {
           AppPrefs.setString(ctx, AppPrefs.KEY_POCKET_TOKEN, query.token).catch(() => {

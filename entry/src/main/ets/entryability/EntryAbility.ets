@@ -1,6 +1,10 @@
 import { AbilityConstant, UIAbility, Want, Configuration, ConfigurationConstant } from '@kit.AbilityKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { window } from '@kit.ArkUI';
+import { notificationManager } from '@kit.NotificationKit';
+import { TaskMonitor } from '../common/store/TaskMonitor';
+import { AppPrefs } from '../common/store/AppPrefs';
+import { ConnectionStore } from '../common/store/ConnectionStore';
 
 const DOMAIN = 0x0000;
 const TAG = 'DSHHarmony';
@@ -17,6 +21,9 @@ export default class EntryAbility extends UIAbility {
   onCreate(want: Want, launchParam: AbilityConstant.LaunchParam): void {
     hilog.info(DOMAIN, TAG, 'EntryAbility onCreate. reason=%{public}d', launchParam.launchReason);
     this.consumeCardUrl(want);
+    // 通知权限（保活常驻通知需要；首次弹系统开关）
+    notificationManager.requestEnableNotification().catch(() => {
+    });
   }
 
   onNewWant(want: Want): void {
@@ -53,10 +60,19 @@ export default class EntryAbility extends UIAbility {
     hilog.info(DOMAIN, TAG, 'EntryAbility onForeground.');
     // 后台切深浅色不回调 onConfigurationUpdate，回前台时强制刷新系统栏颜色
     this.applySystemBarStyle();
+    // 结束后台保活（长时任务 + 常驻通知）
+    TaskMonitor.onForeground(this.context).catch(() => {
+    });
+    // 回前台时确保任务监听运行（读开关）
+    TaskMonitor.ensure(this.context).catch(() => {
+    });
   }
 
   onBackground(): void {
     hilog.info(DOMAIN, TAG, 'EntryAbility onBackground.');
+    // 任务监听开启时申请后台保活（DATA_TRANSFER + 常驻通知）
+    TaskMonitor.onBackground(this.context).catch(() => {
+    });
   }
 
   /** 服务卡片点击直达：把 dshUrl 放进 AppStorage，Index 页面消费 */
