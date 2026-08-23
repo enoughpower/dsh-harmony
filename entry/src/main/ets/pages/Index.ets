@@ -11,6 +11,7 @@ import { UrlInputDialog } from '../components/UrlInputDialog';
 import { CardSync } from '../common/store/CardSync';
 import { LanDiscovery, DiscoveredService } from '../common/utils/LanDiscovery';
 import { AppPrefs } from '../common/store/AppPrefs';
+import { WindowBar } from '../common/utils/WindowBar';
 
 const DOMAIN = 0x0000;
 const TAG = 'DSHHarmony';
@@ -50,6 +51,10 @@ struct Index {
 
   onPageShow(): void {
     this.reloadHistory();
+    // 恢复系统栏颜色（WebShell 会把系统栏设为网页色，回到首页需还原）
+    const barCtx = this.getUIContext().getHostContext() as common.UIAbilityContext;
+    const page = WindowBar.pageBackground(barCtx);
+    WindowBar.set(barCtx, page.bg, page.fg);
     // 打开首页时同步服务卡片状态（在线探测）
     const synCtx = this.getUIContext().getHostContext() as common.UIAbilityContext;
     CardSync.syncAll(synCtx).catch((e: BusinessError) => {

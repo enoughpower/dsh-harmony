@@ -39,6 +39,10 @@
     {
       "name": "panel_background",
       "value": "#1A1D22"
+    },
+    {
+      "name": "floating_surface",
+      "value": "#B32A2E35"
     }
   ]
 }

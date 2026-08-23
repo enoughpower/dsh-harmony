@@ -5,6 +5,7 @@ import { hilog } from '@kit.PerformanceAnalysisKit';
 import { BusinessError } from '@kit.BasicServicesKit';
 import { ConnectionStore } from '../common/store/ConnectionStore';
 import { AppPrefs } from '../common/store/AppPrefs';
+import { BackButton } from '../components/BackButton';
 
 const DOMAIN = 0x0000;
 const TAG = 'DSHHarmony';
@@ -83,6 +84,7 @@ struct SettingsPage {
       .fontSize(13)
       .fontColor($r('app.color.text_secondary'))
       .alignSelf(ItemAlign.Start)
+      .padding({ left: 8, right: 8 })
   }
 
   @Builder
@@ -119,7 +121,8 @@ struct SettingsPage {
   @Builder
   MainContent() {
     Column({ space: 16 }) {
-      Row() {
+      Row({ space: 12 }) {
+        BackButton()
         Text('设置')
           .fontSize(22)
           .fontWeight(FontWeight.Bold)
@@ -127,8 +130,9 @@ struct SettingsPage {
       }
       .width('100%')
 
-      Column({ space: 1 }) {
+      Column({ space: 8 }) {
         this.SectionTitle('连接')
+        Column({ space: 1 }) {
         this.RowItem('连接历史（' + this.historyCount + ' 条）', () => {
           this.clearHistory();
         })
@@ -148,19 +152,22 @@ struct SettingsPage {
         .padding({ left: 16, right: 16 })
         .backgroundColor($r('app.color.card_background'))
       }
-      .width('100%')
+        .width('100%')
       .borderRadius($r('app.float.card_corner_radius'))
       .clip(true)
+      }
 
-      Column({ space: 1 }) {
+      Column({ space: 8 }) {
         this.SectionTitle('Web 数据')
+        Column({ space: 1 }) {
         this.RowItem('清除缓存与 Cookie（重新登录 dsh-pocket）', () => {
           this.clearWebData();
         })
+        }
+        .width('100%')
+        .borderRadius($r('app.float.card_corner_radius'))
+        .clip(true)
       }
-      .width('100%')
-      .borderRadius($r('app.float.card_corner_radius'))
-      .clip(true)
 
       Column({ space: 8 }) {
         this.SectionTitle('关于')

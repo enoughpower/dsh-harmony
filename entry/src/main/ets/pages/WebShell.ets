@@ -1,8 +1,12 @@
 import { webview } from '@kit.ArkWeb';
-import { router } from '@kit.ArkUI';
+import { router, promptAction } from '@kit.ArkUI';
+import { picker, fileUri, fileIo } from '@kit.CoreFileKit';
+import { http } from '@kit.NetworkKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { AppConstants } from '../common/constants/AppConstants';
 import { UrlUtils } from '../common/utils/UrlUtils';
+import { WindowBar } from '../common/utils/WindowBar';
+import { common } from '@kit.AbilityKit';
 
 const DOMAIN = 0x0000;
 const TAG = 'DSHHarmony';
@@ -29,7 +33,16 @@ struct WebShell {
   @State wide: boolean = false;
   private controller: webview.WebviewController = new webview.WebviewController();
 
+  /** WebShell 页面与网页背景一致：系统栏设为白色（跟随网页） */
+  private applyWebBar(): void {
+    const ctx = this.getUIContext().getHostContext() as common.UIAbilityContext;
+    WindowBar.set(ctx, '#FFFFFF', '#000000');
+  }
+
   aboutToAppear(): void {
+    // CDP 调试（webview-devtools 需要；正式版可移除）
+    webview.WebviewController.setWebDebuggingAccess(true);
+    this.applyWebBar();
     const params = router.getParams() as Record<string, string>;
     const raw = params?.['url'] ?? '';
     const normalized = UrlUtils.normalize(raw);
@@ -41,6 +54,11 @@ struct WebShell {
       this.failed = true;
       this.failText = '无效的连接地址';
     }
+  }
+
+  onPageShow(): void {
+    this.applyWebBar();
+    this.ensureDownloadUri();
   }
 
   /** 物理返回键：优先 Web 内后退。 */
@@ -56,73 +74,187 @@ struct WebShell {
     this.failed = false;
     this.failText = '';
     this.loading = true;
-    this.controller.refresh();
+    try {
+      this.controller.refresh();
+    } catch (e) {
+      hilog.warn(DOMAIN, TAG, 'retry failed: %{public}s', (e as Error).message);
+    }
   }
 
+  private refreshing: boolean = false;
+
   private onRefresh(): void {
+    if (this.refreshing) {
+      return;
+    }
+    this.refreshing = true;
     this.loading = true;
-    this.controller.refresh();
+    try {
+      this.controller.refresh();
+    } catch (e) {
+      hilog.warn(DOMAIN, TAG, 'refresh failed: %{public}s', (e as Error).message);
+    }
+    setTimeout(() => {
+      this.refreshing = false;
+    }, 1500);
   }
 
   private backHome(): void {
     router.back();
   }
 
-  @Builder
-  TopBar() {
-    Row({ space: 8 }) {
-      Button('←')
-        .width(36)
-        .height(36)
-        .fontSize(16)
-        .backgroundColor($r('app.color.button_surface'))
-        .fontColor($r('app.color.text_primary'))
-        .onClick(() => {
-          if (this.controller.accessBackward()) {
-            this.controller.backward();
-          } else {
-            this.backHome();
-          }
-        })
-      Text(this.title)
-        .fontSize(15)
-        .fontColor($r('app.color.text_primary'))
-        .maxLines(1)
-        .textOverflow({ overflow: TextOverflow.Ellipsis })
-        .layoutWeight(1)
-      Button('↻')
-        .width(36)
-        .height(36)
-        .fontSize(16)
-        .backgroundColor($r('app.color.button_surface'))
-        .fontColor($r('app.color.text_primary'))
-        .onClick(() => {
-          this.onRefresh();
-        })
-      Button('≡')
-        .width(36)
-        .height(36)
-        .fontSize(16)
-        .backgroundColor($r('app.color.button_surface'))
-        .fontColor($r('app.color.text_primary'))
-        .bindMenu([
-          {
-            value: '返回首页',
-            action: () => {
-              this.backHome();
-            }
-          },
-          {
-            value: '清除 Web 数据',
-            action: () => {
-              this.clearWebData();
-            }
-          }
-        ])
+
+
+
+
+  /** 系统下载服务保存：cookie 认证 + 自动保存到系统下载文件夹（下载管理/通知栏可见） */
+  private downloading: boolean = false;
+
+  /** DOWNLOAD 模式目录 URI（file://docs/storage/Users/currentUser/Download/<bundleName>/），持久化授权 */
+  private downloadUri: string = '';
+  private downloadUriPending: boolean = false;
+
+  /** 获取公共下载目录（DOWNLOAD 模式：跳过选择界面、自动创建在 Download/包名/ 目录） */
+  private ensureDownloadUri(): void {
+    if (this.downloadUri !== '' || this.downloadUriPending) {
+      return;
     }
-    .width('100%')
-    .padding({ left: 12, right: 12, top: 6, bottom: 6 })
+    this.downloadUriPending = true;
+    try {
+      const ctx = this.getUIContext().getHostContext() as common.UIAbilityContext;
+      const options = new picker.DocumentSaveOptions();
+      options.pickerMode = picker.DocumentPickerMode.DOWNLOAD;
+      const dp = new picker.DocumentViewPicker(ctx);
+      dp.save(options).then((uris: string[]) => {
+        this.downloadUriPending = false;
+        if (uris.length > 0 && uris[0] !== '') {
+          this.downloadUri = uris[0];
+          hilog.info(DOMAIN, TAG, 'download uri: %{public}s', this.downloadUri);
+        } else {
+          hilog.warn(DOMAIN, TAG, 'download uri empty');
+        }
+      }).catch((err: BusinessError) => {
+        this.downloadUriPending = false;
+        hilog.warn(DOMAIN, TAG, 'ensure download uri failed: %{public}s', err.message);
+      });
+    } catch (e) {
+      this.downloadUriPending = false;
+      hilog.warn(DOMAIN, TAG, 'ensure download uri error: %{public}s', (e as Error).message);
+    }
   }
+
+  /** 写入公共下载目录；返回展示用位置前缀，失败返回空串 */
+  private saveToPublicDownload(name: string, data: ArrayBuffer): string {
+    if (this.downloadUri === '') {
+      return '';
+    }
+    try {
+      const base = this.downloadUri.replace(/\/+$/, '');
+      // 官方机制：自动创建在 Download/包名/ 目录（系统强制包名子目录，不可自定义）
+      const destPath = new fileUri.FileUri(base + '/' + name).path;
+      const fp = fileIo.openSync(destPath, fileIo.OpenMode.READ_WRITE | fileIo.OpenMode.CREATE);
+      fileIo.writeSync(fp.fd, data);
+      fileIo.closeSync(fp);
+      hilog.info(DOMAIN, TAG, 'public save ok: %{public}s', destPath);
+      return '下载/';
+    } catch (e) {
+      hilog.warn(DOMAIN, TAG, 'public save failed: %{public}s', (e as Error).message);
+      return '';
+    }
+  }
+
+  private saveDshDownload(url: string): void {
+    if (this.downloading) {
+      return;
+    }
+    this.downloading = true;
+    if (!url.startsWith('http')) {
+      this.downloading = false;
+      promptAction.showToast({ message: '下载类型不支持' });
+      return;
+    }
+    // 直接走系统下载（权限静默：若公共搬移被拒则保留沙箱并提示）
+    this.doSystemDownload(url);
+  }
+
+  /** 手动 HTTP 下载（@ohos.net.http，绕开 request 下载服务在 ArkWeb 回调中的崩溃）：
+   * Cookie 认证 -> 内存 -> 写基础 filesDir/downloads（沙箱兜底） */
+  private doSystemDownload(url: string): void {
+    let cookie = '';
+    try {
+      cookie = webview.WebCookieManager.fetchCookieSync(url);
+    } catch (e) {
+      hilog.warn(DOMAIN, TAG, 'fetch cookie failed: %{public}s', (e as Error).message);
+    }
+    const ctx = this.getUIContext().getHostContext() as common.UIAbilityContext;
+    const httpRequest = http.createHttp();
+    const options: http.HttpRequestOptions = {
+      method: http.RequestMethod.GET,
+      header: { 'Cookie': cookie },
+      expectDataType: http.HttpDataType.ARRAY_BUFFER,
+      readTimeout: 120000,
+      connectTimeout: 30000
+    };
+    httpRequest.request(url, options).then((res: http.HttpResponse) => {
+      httpRequest.destroy();
+      if (res.responseCode !== 200) {
+        this.downloading = false;
+        hilog.warn(DOMAIN, TAG, 'http %{public}d for %{public}s', res.responseCode, url);
+        promptAction.showToast({ message: '下载失败 (HTTP ' + res.responseCode + ')' });
+        return;
+      }
+      const data: ArrayBuffer = res.result as ArrayBuffer;
+      if (data.byteLength === 0) {
+        this.downloading = false;
+        promptAction.showToast({ message: '下载数据为空' });
+        return;
+      }
+      const name = this.downloadName(url);
+      // 优先：公共下载目录（DOWNLOAD 模式持久化 URI；无 UI、自动进 下载/包名/）
+      const savedWhere = this.saveToPublicDownload(name, data);
+      if (savedWhere.length > 0) {
+        this.downloading = false;
+        hilog.info(DOMAIN, TAG, 'download ok (public): %{public}s %{public}d bytes', name, data.byteLength);
+        promptAction.showToast({ message: '已保存到 ' + savedWhere + name });
+        return;
+      }
+      // 兜底：应用沙箱
+      const dir = ctx.filesDir + '/downloads';
+      try {
+        if (!fileIo.accessSync(dir)) {
+          fileIo.mkdirSync(dir);
+        }
+      } catch (e) {
+      }
+      const filePath = dir + '/' + name;
+      const fp = fileIo.openSync(filePath, fileIo.OpenMode.READ_WRITE | fileIo.OpenMode.CREATE);
+      fileIo.writeSync(fp.fd, data);
+      fileIo.closeSync(fp);
+      this.downloading = false;
+      hilog.info(DOMAIN, TAG, 'download ok (sandbox): %{public}s %{public}d bytes', name, data.byteLength);
+      promptAction.showToast({ message: '已保存到应用目录: ' + name });
+    }).catch((err: BusinessError) => {
+      httpRequest.destroy();
+      this.downloading = false;
+      hilog.warn(DOMAIN, TAG, 'http download error: %{public}s', err.message);
+      promptAction.showToast({ message: '下载失败: ' + err.message });
+    });
+  }
+
+  /** 从 URL 推断导出文件名（dsh-pocket: /api/session.export?sessionId=<id>） */
+  private downloadName(url: string): string {
+    const q = url.split('?')[1] ?? '';
+    const m = q.match(/sessionId=([^&]+)/);
+    if (m && m.length > 1) {
+      return 'dsh-session-' + m[1] + '.zip';
+    }
+    return 'dsh-export-' + Date.now() + '.zip';
+  }
+
+  // 悬浮操作条已移除（用户需求：不再干扰网页交互）——保留函数体会占用业务域，直接删除
+  // 【删除标记】FloatingBar/FloatMenu 若未来恢复，从 git 历史 53ec5c5 前的版本取回
+
+  /** 光感悬浮菜单（半透明毛玻璃 + 圆角 + 阴影） */
 
   private clearWebData(): void {
     // 均为同步 API（WebStorage.deleteAllData / WebCookieManager.clearAllCookiesSync）
@@ -203,14 +335,13 @@ struct WebShell {
   }
 
   build() {
-    // 背景层：延伸到底部安全区；内容层保持避让
+    // Web 占满方案：顶部让出状态栏（内容默认避让），底部扩展至屏幕底（无背景色条）
     Column() {
       this.Main()
     }
     .width('100%')
     .height('100%')
     .backgroundColor($r('app.color.page_background'))
-    .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.BOTTOM])
   }
 
   @Builder
@@ -220,11 +351,11 @@ struct WebShell {
         this.SidePanel()
       }
       Column() {
-        this.TopBar()
-        if (this.failed) {
-          this.ErrorView()
-        } else {
-          Stack() {
+        Stack() {
+          // Web 铺满（顶部让出状态栏：内容层默认安全区避让；底部扩展至屏幕底）
+          if (this.failed) {
+            this.ErrorView()
+          } else {
             Web({ src: this.url, controller: this.controller })
               .javaScriptAccess(true)
               .domStorageAccess(true)
@@ -235,6 +366,9 @@ struct WebShell {
               })
               .onPageBegin(() => {
                 this.loading = true;
+              })
+              .onDownloadStart((event: OnDownloadStartEvent) => {
+                this.saveDshDownload(event.url ?? '');
               })
               .onPageEnd(() => {
                 this.loading = false;
@@ -247,11 +381,19 @@ struct WebShell {
                 }
               })
               .onErrorReceive((event: OnErrorReceiveEvent) => {
-                // 仅网络级错误（DNS 失败/连接拒绝/超时）显示错误页
-                this.failed = true;
-                this.failText = '网络错误：无法连接 ' + UrlUtils.display(this.url, 32);
-                this.loading = false;
-                hilog.error(DOMAIN, TAG, 'web error: %{public}s', event.error?.getErrorInfo() ?? 'unknown');
+                // 延迟确认：刷新/重载过程中的瞬时错误（如 ERR_ABORTED）不直接显示错误页，
+                // 等 800ms；若页面已恢复（onPageEnd）则忽略。
+                const info = event.error?.getErrorInfo() ?? 'unknown';
+                hilog.error(DOMAIN, TAG, 'web error: %{public}s', info);
+                const self = this;
+                setTimeout(() => {
+                  // 若在等待期间页面已结束加载，说明瞬时错误已恢复
+                  if (!self.failed && self.loading) {
+                    self.failed = true;
+                    self.failText = '网络错误：无法连接 ' + UrlUtils.display(self.url, 32);
+                    self.loading = false;
+                  }
+                }, 800);
               })
               .onHttpErrorReceive((event: OnHttpErrorReceiveEvent) => {
                 // HTTP 状态码不拦截：dsh-pocket 的 PIN 页/登录挑战/子资源 401 都交给页面自身处理
@@ -260,26 +402,42 @@ struct WebShell {
               })
               .width('100%')
               .height('100%')
-
-            if (this.loading && this.progress > 0 && this.progress < 100) {
-              Progress({ value: this.progress, total: 100, type: ProgressType.Linear })
-                .color($r('app.color.primary'))
-                .width('100%')
-                .height(2)
-                .position({ x: 0, y: 0 })
-            }
+              .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.BOTTOM])
+              .multiWindowAccess(true)
+              .allowWindowOpenMethod(true)
+              .onWindowNew((event: OnWindowNewEvent) => {
+                // 单窗口策略：新窗口 URL 在当前 Web 中加载（DSH 导出预览等）
+                const newUrl = event.targetUrl ?? '';
+                hilog.info(DOMAIN, TAG, 'window.open request: %{public}s', newUrl);
+                if (newUrl.length > 0) {
+                  this.controller.loadUrl(newUrl);
+                }
+                event.handler.setWebController(null);
+              })
           }
-          .layoutWeight(1)
-          .width('100%')
+
+          if (this.loading && this.progress > 0 && this.progress < 100) {
+            Progress({ value: this.progress, total: 100, type: ProgressType.Linear })
+              .color($r('app.color.primary'))
+              .width('100%')
+              .height(2)
+              .position({ x: 0, y: 0 })
+          }
+
+          // 悬浮按钮已移除（曾拦截网页顶部交互）；物理返回键仍可后退/回首页
         }
+        .layoutWeight(1)
+        .width('100%')
+        .backgroundColor(Color.White)
       }
       .layoutWeight(1)
       .height('100%')
       .width('100%')
+      .backgroundColor(Color.White)
     }
     .width('100%')
     .height('100%')
-    .backgroundColor($r('app.color.page_background'))
+    .backgroundColor(Color.White)
     .onAreaChange((oldValue: Area, newValue: Area) => {
       const w = newValue.width as number;
       const nowWide = w >= AppConstants.WIDE_BREAKPOINT;
