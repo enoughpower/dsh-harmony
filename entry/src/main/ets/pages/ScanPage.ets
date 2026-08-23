@@ -1,5 +1,5 @@
 import { customScan, scanBarcode, scanCore } from '@kit.ScanKit';
-import { router, promptAction, window, uiMaterial } from '@kit.ArkUI';
+import { router, promptAction, window } from '@kit.ArkUI';
 import { common } from '@kit.AbilityKit';
 import { AsyncCallback, BusinessError } from '@kit.BasicServicesKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
@@ -230,11 +230,10 @@ struct ScanPage {
       .width(40)
       .height(40)
       .borderRadius(20)
-      .backgroundColor(Color.Transparent)
-      .systemMaterial(new uiMaterial.ImmersiveMaterial({
-        style: uiMaterial.ImmersiveStyle.ULTRA_THIN,
-        interactive: false
-      }))
+      .backgroundColor('#59101010')
+      .backdropBlur(24)
+      .shadow({ radius: 8, color: '#1F000000', offsetY: 1 })
+      .stateEffect(false)
       .position({ x: 20, y: 60 })
       .onClick(() => {
         this.stopScan();
@@ -249,11 +248,10 @@ struct ScanPage {
       .width(40)
       .height(40)
       .borderRadius(20)
-      .backgroundColor(Color.Transparent)
-      .systemMaterial(new uiMaterial.ImmersiveMaterial({
-        style: uiMaterial.ImmersiveStyle.ULTRA_THIN,
-        interactive: false
-      }))
+      .backgroundColor('#59101010')
+      .backdropBlur(24)
+      .shadow({ radius: 8, color: '#1F000000', offsetY: 1 })
+      .stateEffect(false)
       .position({ x: (this.vw - 40) / 2, y: this.vh / 2 + 150 })
       .onClick(() => {
         this.toggleTorch();
