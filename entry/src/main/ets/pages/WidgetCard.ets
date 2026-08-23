@@ -63,8 +63,10 @@ struct WidgetCard {
           .fontWeight(FontWeight.Bold)
           .fontColor('#1A1A1A')
         Blank()
-        Text('🐋')
-          .fontSize(14)
+        Image($r('app.media.widget_whale'))
+          .width(26)
+          .height(26)
+          .objectFit(ImageFit.Contain)
       }
       .width('100%')
 
