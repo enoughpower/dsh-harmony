@@ -106,6 +106,18 @@ struct SettingsPage {
   }
 
   build() {
+    // 背景层：延伸到底部安全区；内容层保持避让
+    Column() {
+      this.MainContent()
+    }
+    .width('100%')
+    .height('100%')
+    .backgroundColor($r('app.color.page_background'))
+    .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.BOTTOM])
+  }
+
+  @Builder
+  MainContent() {
     Column({ space: 16 }) {
       Row() {
         Text('设置')
@@ -176,6 +188,6 @@ struct SettingsPage {
     .height('100%')
     .padding({ left: 20, right: 20, top: 16, bottom: 20 })
     .backgroundColor($r('app.color.page_background'))
-    // 保持默认安全区布局（不扩展，避免内容与状态栏重叠）
+    .alignItems(HorizontalAlign.Center)
   }
 }
