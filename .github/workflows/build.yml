@@ -11,8 +11,8 @@ name: CI
 #   2. 设置 repository variables：CLT_URL（直链）、CLT_SHA256（可选，完整性校验）
 #
 # 触发：
-#   - push / PR：debug 构建，产物上传 artifact（自用安装）
-#   - tag v*：release 构建 + 签名（secrets）+ GitHub Release 发布
+#   - push / PR：debug 构建验证（不上传安装包）
+#   - tag v*：release 构建 + 签名（secrets）+ GitHub Release 发布正式安装包（唯一产出安装包的节点）
 #
 # 签名 secrets（可选，tag 构建自动签名）：
 #   SIGNING_KEY / SIGNING_CERT / SIGNING_PROFILE  （p12/cer/p7b 的 base64）
@@ -80,13 +80,6 @@ jobs:
         run: |
           export PATH="$CLT_DIR/command-line-tools/ohpm/bin:$CLT_DIR/command-line-tools/hvigor/bin:$PATH"
           hvigorw --mode module -p module=entry@default -p buildMode=debug assembleHap --no-daemon
-
-      - name: Upload HAP artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: dsh-lite-debug
-          path: entry/build/default/outputs/default/*.hap
-          if-no-files-found: error
 
   release:
     name: Build release + sign + publish
