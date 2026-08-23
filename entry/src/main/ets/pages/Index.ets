@@ -264,6 +264,18 @@ struct Index {
   }
 
   build() {
+    // 背景层：延伸到底部安全区（手势条区域与页面背景融合），内容层保持安全区内避让
+    Column() {
+      this.MainContent()
+    }
+    .width('100%')
+    .height('100%')
+    .backgroundColor($r('app.color.page_background'))
+    .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.BOTTOM])
+  }
+
+  @Builder
+  MainContent() {
     Column({ space: 16 }) {
       this.Header()
 
@@ -330,6 +342,6 @@ struct Index {
     .height('100%')
     .padding({ left: 20, right: 20, top: 16, bottom: 20 })
     .backgroundColor($r('app.color.page_background'))
-    // 保持默认安全区布局（不扩展，避免内容与状态栏重叠）
+    .alignItems(HorizontalAlign.Center)
   }
 }

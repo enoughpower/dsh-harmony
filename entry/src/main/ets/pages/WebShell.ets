@@ -203,6 +203,18 @@ struct WebShell {
   }
 
   build() {
+    // 背景层：延伸到底部安全区；内容层保持避让
+    Column() {
+      this.Main()
+    }
+    .width('100%')
+    .height('100%')
+    .backgroundColor($r('app.color.page_background'))
+    .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.BOTTOM])
+  }
+
+  @Builder
+  Main() {
     Row() {
       if (this.wide) {
         this.SidePanel()
@@ -269,7 +281,6 @@ struct WebShell {
     .width('100%')
     .height('100%')
     .backgroundColor($r('app.color.page_background'))
-    // 保持默认安全区布局（不扩展，避免内容与状态栏重叠）
     .onAreaChange((oldValue: Area, newValue: Area) => {
       const w = newValue.width as number;
       const nowWide = w >= AppConstants.WIDE_BREAKPOINT;
