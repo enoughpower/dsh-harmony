@@ -82,8 +82,8 @@ export default class EntryAbility extends UIAbility {
       win.setWindowSystemBarProperties({
         statusBarColor: hex,
         navigationBarColor: hex,
-        statusBarContentColor: dark ? '#FFFFFF' : '#1A1A1A',
-        navigationBarContentColor: dark ? '#FFFFFF' : '#1A1A1A'
+        statusBarContentColor: dark ? '#FFFFFF' : '#000000',
+        navigationBarContentColor: dark ? '#FFFFFF' : '#000000'
       });
     } catch (e) {
       hilog.warn(DOMAIN, TAG, 'setWindowSystemBarProperties failed: %{public}s', (e as Error).message);
