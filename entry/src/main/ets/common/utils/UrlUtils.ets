@@ -49,6 +49,12 @@ export class UrlUtils {
     return UrlUtils.HTTP_RE.test((raw ?? '').trim());
   }
 
+  /** 提取主机名（不含协议与端口，如 192.168.5.13 / example.com） */
+  static hostOf(raw: string): string {
+    const s = (raw ?? '').replace(UrlUtils.HTTP_RE, '');
+    return s.split(':')[0].split('/')[0].split('?')[0];
+  }
+
   /** 展示用摘要：去掉协议前缀，超长截断 */
   static display(raw: string, maxLen: number = 40): string {
     const s = (raw ?? '').replace(UrlUtils.HTTP_RE, '');

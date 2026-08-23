@@ -8,6 +8,8 @@ import { AppConstants } from '../constants/AppConstants';
  */
 export class AppPrefs {
   static readonly KEY_AUTO_DISCOVER: string = 'auto_discover';
+  /** 进入 App 自动连接最近一次使用的 IP（替代旧的自动扫描开关） */
+  static readonly KEY_AUTO_CONNECT: string = 'auto_connect_latest';
   /** dsh-pocket 局域网访问 PIN（默认 11111111） */
   static readonly KEY_LAN_PIN: string = 'lan_pin';
   static readonly DEFAULT_LAN_PIN: string = '11111111';

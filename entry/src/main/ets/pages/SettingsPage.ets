@@ -1,11 +1,17 @@
 import { webview } from '@kit.ArkWeb';
 import { common, bundleManager } from '@kit.AbilityKit';
-import { promptAction } from '@kit.ArkUI';
+import { promptAction, router } from '@kit.ArkUI';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { BusinessError } from '@kit.BasicServicesKit';
 import { ConnectionStore } from '../common/store/ConnectionStore';
+import { fileIo } from '@kit.CoreFileKit';
+import { util } from '@kit.ArkTS';
 import { AppPrefs } from '../common/store/AppPrefs';
 import { BackButton } from '../components/BackButton';
+import { LanDiscovery, DiscoveredService } from '../common/utils/LanDiscovery';
+import { ConnectionCard } from '../components/ConnectionCard';
+import { UrlUtils } from '../common/utils/UrlUtils';
+import { ConnectionProfile } from '../model/ConnectionProfile';
 
 const DOMAIN = 0x0000;
 const TAG = 'DSHHarmony';
@@ -18,23 +24,54 @@ const TAG = 'DSHHarmony';
 struct SettingsPage {
   @State version: string = '1.0.0';
   @State historyCount: number = 0;
-  @State autoScan: boolean = true;
+  @State autoConnect: boolean = true;
   @State lanPin: string = AppPrefs.DEFAULT_LAN_PIN;
+  @State scanning: boolean = false;
+  @State discovered: DiscoveredService[] = [];
   private store: ConnectionStore = new ConnectionStore();
 
   aboutToAppear(): void {
     this.loadVersion();
     this.loadHistoryCount();
-    this.loadAutoScan();
+    this.loadAutoConnect();
     this.loadLanPin();
   }
 
-  private loadAutoScan(): void {
+  private loadAutoConnect(): void {
     const ctx = this.getUIContext().getHostContext() as common.UIAbilityContext;
-    AppPrefs.getBool(ctx, AppPrefs.KEY_AUTO_DISCOVER, true).then((v: boolean) => {
-      this.autoScan = v;
+    AppPrefs.getBool(ctx, AppPrefs.KEY_AUTO_CONNECT, true).then((v: boolean) => {
+      this.autoConnect = v;
     }).catch(() => {
     });
+  }
+
+  private scanLan(): void {
+    if (this.scanning) {
+      return;
+    }
+    this.scanning = true;
+    this.discovered = [];
+    LanDiscovery.discover().then((found: DiscoveredService[]) => {
+      this.discovered = found;
+      this.scanning = false;
+      if (found.length === 0) {
+        promptAction.showToast({ message: '未发现局域网 DSH 服务' });
+      }
+    }).catch(() => {
+      this.scanning = false;
+      promptAction.showToast({ message: '扫描失败' });
+    });
+  }
+
+  private connectTo(url: string): void {
+    const normalized = UrlUtils.normalize(url);
+    if (normalized === null) {
+      return;
+    }
+    const ctx = this.getUIContext().getHostContext() as common.UIAbilityContext;
+    this.store.upsert(ctx, new ConnectionProfile(normalized, UrlUtils.display(normalized, 32))).catch(() => {
+    });
+    router.pushUrl({ url: 'pages/WebShell', params: { 'url': normalized } });
   }
 
   private loadLanPin(): void {
@@ -53,10 +90,10 @@ struct SettingsPage {
     });
   }
 
-  private toggleAutoScan(checked: boolean): void {
-    this.autoScan = checked;
+  private toggleAutoConnect(checked: boolean): void {
+    this.autoConnect = checked;
     const ctx = this.getUIContext().getHostContext() as common.UIAbilityContext;
-    AppPrefs.setBool(ctx, AppPrefs.KEY_AUTO_DISCOVER, checked).catch(() => {
+    AppPrefs.setBool(ctx, AppPrefs.KEY_AUTO_CONNECT, checked).catch(() => {
     });
   }
 
@@ -70,12 +107,42 @@ struct SettingsPage {
       });
   }
 
+  private logDebug(context: common.Context, msg: string): void {
+    try {
+      const path = context.filesDir + '/pocket-debug.log';
+      let old = '';
+      if (fileIo.accessSync(path)) {
+        const rf = fileIo.openSync(path, fileIo.OpenMode.READ_WRITE);
+        const buf = new ArrayBuffer(16384);
+        const n = fileIo.readSync(rf.fd, buf);
+        old = n > 0 ? util.TextDecoder.create('utf-8').decodeToString(new Uint8Array(buf, 0, n)) : '';
+        fileIo.closeSync(rf);
+      }
+      old = old + new Date().toString() + ' ' + msg + '\n';
+      if (old.length > 65536) {
+        old = old.slice(old.length - 65536);
+      }
+      const wf = fileIo.openSync(path, fileIo.OpenMode.READ_WRITE | fileIo.OpenMode.CREATE);
+      fileIo.writeSync(wf.fd, old);
+      fileIo.closeSync(wf);
+    } catch (e) {
+    }
+  }
+
   private loadHistoryCount(): void {
     const ctx = this.getUIContext().getHostContext() as common.UIAbilityContext;
-    this.store.loadAll(ctx).then((list) => {
+    this.logDebug(ctx, 'history count: start');
+    this.store.loadDistinctByIp(ctx).then((list) => {
+      this.logDebug(ctx, 'history count: distinct=' + list.length);
       this.historyCount = list.length;
-    }).catch(() => {
-      this.historyCount = 0;
+    }).catch((e: BusinessError) => {
+      this.logDebug(ctx, 'history count failed: ' + e.message);
+      // 兜底：用原始列表（与首页一致）
+      this.store.loadAll(ctx).then((raw) => {
+        this.historyCount = raw.length;
+      }).catch(() => {
+        this.historyCount = 0;
+      });
     });
   }
 
@@ -151,19 +218,54 @@ struct SettingsPage {
       Column({ space: 8 }) {
         this.SectionTitle('连接')
         Column({ space: 1 }) {
-          this.RowItem('连接历史（' + this.historyCount + ' 条）', () => {
-            this.clearHistory();
-          })
           Row() {
-            Text('打开时自动扫描局域网')
+            Text('连接历史（' + this.historyCount + ' 条）')
               .fontSize(15)
               .fontColor($r('app.color.text_primary'))
               .layoutWeight(1)
-            Toggle({ type: ToggleType.Switch, isOn: this.autoScan })
+            Text('›')
+              .fontSize(18)
+              .fontColor($r('app.color.text_secondary'))
+          }
+          .width('100%')
+          .height(52)
+          .padding({ left: 16, right: 16 })
+          .backgroundColor($r('app.color.card_background'))
+          .onClick(() => {
+            router.pushUrl({ url: 'pages/HistoryPage' });
+          })
+          Row() {
+            Text('自动连接最近的 IP')
+              .fontSize(15)
+              .fontColor($r('app.color.text_primary'))
+              .layoutWeight(1)
+            Toggle({ type: ToggleType.Switch, isOn: this.autoConnect })
               .selectedColor($r('app.color.primary'))
               .onChange((checked: boolean) => {
-                this.toggleAutoScan(checked);
+                this.toggleAutoConnect(checked);
               })
+          }
+          .width('100%')
+          .height(52)
+          .padding({ left: 16, right: 16 })
+          .backgroundColor($r('app.color.card_background'))
+          Row() {
+            Text('扫描局域网服务')
+              .fontSize(15)
+              .fontColor($r('app.color.text_primary'))
+              .layoutWeight(1)
+            if (this.scanning) {
+              LoadingProgress()
+                .width(18)
+                .height(18)
+            } else {
+              Text('扫描')
+                .fontSize(13)
+                .fontColor($r('app.color.primary'))
+                .onClick(() => {
+                  this.scanLan();
+                })
+            }
           }
           .width('100%')
           .height(52)
@@ -190,6 +292,24 @@ struct SettingsPage {
         .width('100%')
         .borderRadius($r('app.float.card_corner_radius'))
         .clip(true)
+      }
+
+      if (this.discovered.length > 0) {
+        Column({ space: 8 }) {
+          this.SectionTitle('发现 ' + this.discovered.length + ' 个局域网服务')
+          ForEach(this.discovered, (item: DiscoveredService) => {
+            ConnectionCard({
+              profile: new ConnectionProfile(item.url, item.host),
+              onOpen: (url: string) => {
+                this.connectTo(url);
+              },
+              onRemove: () => {
+                this.discovered = this.discovered.filter((s: DiscoveredService) => s.url !== item.url);
+              }
+            })
+          }, (item: DiscoveredService) => item.url)
+        }
+        .width('100%')
       }
 
       Column({ space: 8 }) {

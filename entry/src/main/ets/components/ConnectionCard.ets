@@ -21,6 +21,8 @@ export struct ConnectionCard {
   profile: ConnectionProfile = new ConnectionProfile();
   onOpen: (url: string) => void = () => {};
   onRemove: (url: string) => void = () => {};
+  /** 是否启用长按删除（首页展示禁用，删除在历史页进行） */
+  deleteEnabled: boolean = true;
 
   build() {
     Row({ space: 12 }) {
@@ -52,7 +54,9 @@ export struct ConnectionCard {
     .backgroundColor($r('app.color.card_background'))
     .borderRadius($r('app.float.card_corner_radius'))
     .gesture(LongPressGesture().onAction(() => {
-      this.onRemove(this.profile.url);
+      if (this.deleteEnabled) {
+        this.onRemove(this.profile.url);
+      }
     }))
   }
 }

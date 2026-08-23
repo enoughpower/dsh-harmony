@@ -11,7 +11,6 @@ import { UrlUtils } from '../common/utils/UrlUtils';
 import { ConnectionCard } from '../components/ConnectionCard';
 import { UrlInputDialog } from '../components/UrlInputDialog';
 import { CardSync } from '../common/store/CardSync';
-import { LanDiscovery, DiscoveredService } from '../common/utils/LanDiscovery';
 import { AppPrefs } from '../common/store/AppPrefs';
 import { WindowBar } from '../common/utils/WindowBar';
 import { PocketApi, LatestSessionInfo, SessionQueryResult } from '../common/utils/PocketApi';
@@ -28,15 +27,15 @@ const TAG = 'DSHHarmony';
 struct Index {
   @State connections: ConnectionProfile[] = [];
   @State busy: boolean = false;
-  @State scanning: boolean = false;
-  @State discovered: DiscoveredService[] = [];
-  @State autoScanEnabled: boolean = true;
+  @State autoConnectEnabled: boolean = true;
   @State latestSession: LatestSessionInfo | null = null;
   @State sessionLoading: boolean = false;
   @State sessionError: string = '';
   private store: ConnectionStore = new ConnectionStore();
-  /** 会话内是否已自动扫描过（防止 WebShell 返回时重复扫/自动拉回） */
-  private autoScanned: boolean = false;
+  /** 会话内是否已自动连接过（防止 WebShell 返回时重复拉/自动拉回） */
+  private autoConnected: boolean = false;
+  /** 开关配置是否已读取完成（避免异步竞态导致未读到的默认值参与判定） */
+  private autoConnectReady: boolean = false;
   private dialogController: CustomDialogController = new CustomDialogController({
     builder: UrlInputDialog({
       onConfirm: (url: string) => {
@@ -50,8 +49,11 @@ struct Index {
   aboutToAppear(): void {
     this.reloadHistory();
     const ctx = this.getUIContext().getHostContext() as common.UIAbilityContext;
-    AppPrefs.getBool(ctx, AppPrefs.KEY_AUTO_DISCOVER, true).then((v: boolean) => {
-      this.autoScanEnabled = v;
+    AppPrefs.getBool(ctx, AppPrefs.KEY_AUTO_CONNECT, true).then((v: boolean) => {
+      this.autoConnectEnabled = v;
+      this.autoConnectReady = true;
+      // 配置就绪后再判定（onPageShow 可能早于此完成）
+      this.maybeAutoConnect();
     });
   }
 
@@ -75,11 +77,22 @@ struct Index {
       this.openUrl(pending);
       return;
     }
-    // 打开即自动扫描（app 启动/首次进入时一次；返回首页不重复扫）
-    if (this.autoScanEnabled && !this.autoScanned) {
-      this.autoScanned = true;
-      this.discoverAndOpen();
+    // 进入 App 自动连接最近使用的 IP（开关开启时；会话内一次）
+    this.maybeAutoConnect();
+  }
+
+  /** 自动连接判定：开关已读取、开关为开、会话内未连接过、且有历史记录时执行 */
+  private maybeAutoConnect(): void {
+    if (!this.autoConnectReady || !this.autoConnectEnabled || this.autoConnected) {
+      return;
     }
+    this.autoConnected = true;
+    this.store.loadAll(this.getUIContext().getHostContext() as common.UIAbilityContext).then((list: ConnectionProfile[]) => {
+      if (list.length > 0) {
+        this.openUrl(list[0].url);
+      }
+    }).catch(() => {
+    });
   }
 
   private reloadHistory(): void {
@@ -217,36 +230,6 @@ struct Index {
     }
   }
 
-  /** 自动发现局域网 dsh-pocket 服务：单个直接连，多个列出选择 */
-  private async discoverAndOpen(): Promise<void> {
-    if (this.scanning) {
-      return;
-    }
-    this.scanning = true;
-    this.discovered = [];
-    try {
-      await new Promise<void>((resolve: () => void) => {
-        setTimeout(resolve, 100);
-      });
-      const found = await LanDiscovery.discover();
-      if (found.length === 0) {
-        this.scanning = false;
-        return;
-      }
-      if (found.length === 1) {
-        this.scanning = false;
-        this.openUrl(found[0].url);
-        return;
-      }
-      this.discovered = found;
-      this.scanning = false;
-    } catch (e) {
-      this.scanning = false;
-      const err = e as BusinessError;
-      hilog.warn(DOMAIN, TAG, 'discover failed: %{public}s', err.message);
-    }
-  }
-
   private ensureCameraPermission(): Promise<boolean> {
     return new Promise<boolean>((resolve: (ok: boolean) => void) => {
       const atManager = abilityAccessCtrl.createAtManager();
@@ -279,14 +262,19 @@ struct Index {
       .layoutWeight(1)
       .alignItems(HorizontalAlign.Start)
 
-      Button('设置')
-        .height(32)
-        .fontSize(13)
-        .backgroundColor($r('app.color.button_surface'))
-        .fontColor($r('app.color.text_primary'))
-        .onClick(() => {
-          router.pushUrl({ url: 'pages/SettingsPage' });
-        })
+      Button() {
+        SymbolGlyph($r('sys.symbol.gearshape'))
+          .fontSize(22)
+          .fontColor([$r('app.color.text_primary')])
+      }
+      .width(36)
+      .height(36)
+      .borderRadius(18)
+      .backgroundColor($r('app.color.button_surface'))
+      .stateEffect(false)
+      .onClick(() => {
+        router.pushUrl({ url: 'pages/SettingsPage' });
+      })
     }
     .width('100%')
   }
@@ -382,16 +370,6 @@ struct Index {
         .onClick(() => {
           this.dialogController.open();
         })
-      Button('自动发现局域网 DSH（免扫码）')
-        .width('100%')
-        .height(44)
-        .fontSize(15)
-        .backgroundColor($r('app.color.button_surface'))
-        .fontColor($r('app.color.text_primary'))
-        .enabled(!this.scanning)
-        .onClick(() => {
-          this.discoverAndOpen();
-        })
     }
     .width('100%')
   }
@@ -429,62 +407,19 @@ struct Index {
 
       this.LatestSessionCard()
 
-      List({ space: 12 }) {
-        ForEach(this.connections, (item: ConnectionProfile) => {
-          ListItem() {
-            ConnectionCard({
-              profile: item,
-              onOpen: (url: string) => {
-                this.openUrl(url);
-              },
-              onRemove: (url: string) => {
-                this.removeConnection(url);
-              }
-            })
+      if (this.connections.length > 0) {
+        ConnectionCard({
+          profile: this.connections[0],
+          deleteEnabled: false,
+          onOpen: (url: string) => {
+            this.openUrl(url);
           }
-        }, (item: ConnectionProfile) => item.url)
-      }
-      .layoutWeight(1)
-      .width('100%')
-      .scrollBar(BarState.Off)
-
-      if (this.scanning) {
-        Column({ space: 10 }) {
-          LoadingProgress()
-            .width(36)
-            .height(36)
-          Text('正在扫描局域网 3081 端口…')
-            .fontSize(13)
-            .fontColor($r('app.color.text_secondary'))
-        }
-        .width('100%')
-        .padding({ top: 24, bottom: 8 })
-      }
-
-      if (this.discovered.length > 0) {
-        Column({ space: 10 }) {
-          Text('发现 ' + this.discovered.length + ' 个局域网 DSH 服务')
-            .fontSize(13)
-            .fontColor($r('app.color.text_secondary'))
-            .alignSelf(ItemAlign.Start)
-          ForEach(this.discovered, (item: DiscoveredService) => {
-            ConnectionCard({
-              profile: new ConnectionProfile(item.url, item.host),
-              onOpen: (url: string) => {
-                this.openUrl(url);
-              },
-              onRemove: () => {
-                this.discovered = this.discovered.filter((s: DiscoveredService) => s.url !== item.url);
-              }
-            })
-          }, (item: DiscoveredService) => item.url)
-        }
-        .width('100%')
-      }
-
-      if (this.connections.length === 0) {
+        })
+      } else {
         this.EmptyHistory()
       }
+
+      Blank()
 
       this.ActionButtons()
     }

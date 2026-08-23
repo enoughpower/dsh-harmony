@@ -2,6 +2,7 @@ import { preferences } from '@kit.ArkData';
 import { common } from '@kit.AbilityKit';
 import { AppConstants } from '../constants/AppConstants';
 import { ConnectionProfile } from '../../model/ConnectionProfile';
+import { UrlUtils } from '../utils/UrlUtils';
 
 /**
  * 连接历史存储（Preferences 封装）。
@@ -38,6 +39,35 @@ export class ConnectionStore {
     for (const item of arr) {
       const p = ConnectionProfile.fromStored(item);
       if (p !== null) {
+        out.push(p);
+      }
+    }
+    out.sort((a: ConnectionProfile, b: ConnectionProfile) => b.lastUsedAt - a.lastUsedAt);
+    return out;
+  }
+
+  /** 按主机名（IP）去重的历史：同一 IP 仅保留最近使用的一条，时间倒序。 */
+  async loadDistinctByIp(context: common.Context): Promise<ConnectionProfile[]> {
+    const list = await this.loadAll(context);
+    const byHost: Map<string, ConnectionProfile> = new Map<string, ConnectionProfile>();
+    const order: string[] = [];
+    for (const p of list) {
+      const host = UrlUtils.hostOf(p.url);
+      if (host.length === 0) {
+        continue;
+      }
+      const existing = byHost.get(host);
+      if (existing === undefined || p.lastUsedAt > existing.lastUsedAt) {
+        if (existing === undefined) {
+          order.push(host);
+        }
+        byHost.set(host, p);
+      }
+    }
+    const out: ConnectionProfile[] = [];
+    for (const host of order) {
+      const p = byHost.get(host);
+      if (p !== undefined) {
         out.push(p);
       }
     }
