@@ -7,7 +7,7 @@ A **native HarmonyOS client for DeepSeek Harness**, designed to work with the [d
 
 ## Features
 
-- 📷 **Scan to connect**: ScanKit system scan UI (album scanning included); scan → validate → open ArkWeb
+- 📷 **Scan to connect**: custom immersive scanner (transparent status bar, WeChat-style gradient scan line, glass ×/flash buttons); scan → validate → open ArkWeb
 - 🧭 **Connection history**: deduped by IP, newest first, swipe-to-delete, tap to open; home keeps the latest entry; manual URL input supported
 - ⚡ **Auto-connect**: with the setting on, each app launch auto-connects the most recent IP (no scan needed)
 - 📥 **Export auto-save**: session-log exports land in the phone's Downloads automatically (zero dialogs; under Downloads/com.dsh.lite/)

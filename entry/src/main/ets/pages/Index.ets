@@ -1,4 +1,3 @@
-import { scanBarcode, scanCore } from '@kit.ScanKit';
 import { abilityAccessCtrl, common, Permissions } from '@kit.AbilityKit';
 import { router } from '@kit.ArkUI';
 import { fileIo } from '@kit.CoreFileKit';
@@ -199,7 +198,7 @@ struct Index {
     });
   }
 
-  /** 扫码（系统默认界面）→ 打开。 */
+  /** 扫码：自绘扫码页（全黑沉浸）→ 结果经 pendingDshUrl 回流。 */
   private async scanAndOpen(): Promise<void> {
     if (this.busy) {
       return;
@@ -210,21 +209,7 @@ struct Index {
         hilog.warn(DOMAIN, TAG, 'camera permission denied');
         return;
       }
-      const options: scanBarcode.ScanOptions = {
-        scanTypes: [scanCore.ScanType.ALL],
-        enableAlbum: true
-      };
-      const ctx = this.getUIContext().getHostContext() as common.UIAbilityContext;
-      const result: scanBarcode.ScanResult = await scanBarcode.startScanForResult(ctx, options);
-      const raw = result?.originalValue ?? '';
-      hilog.info(DOMAIN, TAG, 'scan result: %{public}s', raw);
-      if (raw.length > 0) {
-        this.openUrl(raw);
-      }
-    } catch (e) {
-      // 用户取消（常见 code 200 / 201）与真失败都走这里，取消不算故障
-      const err = e as BusinessError;
-      hilog.info(DOMAIN, TAG, 'scan ended: code=%{public}d message=%{public}s', err.code, err.message);
+      router.pushUrl({ url: 'pages/ScanPage' });
     } finally {
       this.busy = false;
     }
