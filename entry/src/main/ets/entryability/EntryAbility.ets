@@ -51,6 +51,8 @@ export default class EntryAbility extends UIAbility {
 
   onForeground(): void {
     hilog.info(DOMAIN, TAG, 'EntryAbility onForeground.');
+    // 后台切深浅色不回调 onConfigurationUpdate，回前台时强制刷新系统栏颜色
+    this.applySystemBarStyle();
   }
 
   onBackground(): void {
