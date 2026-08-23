@@ -46,50 +46,23 @@ jobs:
 
   # 完整构建：tag 发布 或 手动 dispatch
   build:
-    name: Build debug HAP
-    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
-    runs-on: ubuntu-latest
+    name: Build debug HAP (self-hosted Mac)
+    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch' || github.event_name == 'push'
+    runs-on: self-hosted
     steps:
       - uses: actions/checkout@v4
 
-      - name: Restore toolchain cache
-        id: clt-cache
-        uses: actions/cache@v4
-        with:
-          path: ${{ runner.temp }}/harmony-clt/command-line-tools
-          key: harmony-clt-26-v1
-
-      - name: Install HarmonyOS command-line tools (cache miss)
-        if: steps.clt-cache.outputs.cache-hit != 'true'
-        env:
-          CLT_DIR: ${{ runner.temp }}/harmony-clt
+      - name: Install dependencies (本机 mac26 工具链, 零下载)
         run: |
-          set -euo pipefail
-          URL="${CLT_URL_INPUT:-${CLT_URL_VAR:-}}"
-          SHA="${CLT_SHA_INPUT:-${CLT_SHA_VAR:-}}"
-          if [ -z "$URL" ]; then
-            echo "::error::未配置 Command Line Tools 直链（CLT_URL）"
-            exit 1
-          fi
-          mkdir -p "$CLT_DIR"
-          curl -fsSL -o "$CLT_DIR/clt.tgz" "$URL"
-          if [ -n "$SHA" ]; then echo "$SHA  $CLT_DIR/clt.tgz" | sha256sum -c -; fi
-          tar --zstd -xf "$CLT_DIR/clt.tgz" -C "$CLT_DIR"
-          ls "$CLT_DIR"
-
-      - name: Install dependencies
-        env:
-          CLT_DIR: ${{ runner.temp }}/harmony-clt
-        run: |
-          export PATH="$CLT_DIR/command-line-tools/ohpm/bin:$CLT_DIR/command-line-tools/hvigor/bin:$PATH"
+          export DEVECO_SDK_HOME=/Users/dale/.harmony/command-line-tools-mac26/sdk
+          export PATH="/Users/dale/.nvm/versions/node/v22.19.0/bin:/Users/dale/.harmony/command-line-tools-mac26/ohpm/bin:/Users/dale/.harmony/command-line-tools-mac26/hvigor/bin:$PATH"
           ohpm install --all
 
       - name: Build debug HAP
         env:
-          CLT_DIR: ${{ runner.temp }}/harmony-clt
-          DEVECO_SDK_HOME: ${{ runner.temp }}/harmony-clt/command-line-tools/sdk
+          DEVECO_SDK_HOME: /Users/dale/.harmony/command-line-tools-mac26/sdk
         run: |
-          export PATH="$CLT_DIR/command-line-tools/ohpm/bin:$CLT_DIR/command-line-tools/hvigor/bin:$PATH"
+          export PATH="/Users/dale/.nvm/versions/node/v22.19.0/bin:/Users/dale/.harmony/command-line-tools-mac26/ohpm/bin:/Users/dale/.harmony/command-line-tools-mac26/hvigor/bin:$PATH"
           hvigorw --mode module -p module=entry@default -p buildMode=debug assembleHap --no-daemon
 
   release:
