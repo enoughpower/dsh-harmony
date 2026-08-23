@@ -67,8 +67,8 @@ export default class EntryAbility extends UIAbility {
   }
 
   /**
-   * 系统栏颜色对齐页面背景资源色（实色）。
-   * 浅色：#F7F8FA + 深色内容；深色：#121417 + 浅色内容。
+   * 系统栏颜色（确定性硬编码，不依赖资源解析时序）：
+   * 浅色模式：背景 #F7F8FA + 内容纯黑；深色模式：背景 #121417 + 内容纯白。
    */
   private applySystemBarStyle(): void {
     if (this.winStage === null) {
@@ -77,11 +77,9 @@ export default class EntryAbility extends UIAbility {
     try {
       const win = this.winStage.getMainWindowSync();
       const dark = this.context.config.colorMode === ConfigurationConstant.ColorMode.COLOR_MODE_DARK;
-      const argb = this.context.resourceManager.getColorSync($r('app.color.page_background').id);
-      const hex = '#' + (argb >>> 0).toString(16).padStart(8, '0').slice(2).toUpperCase();
       win.setWindowSystemBarProperties({
-        statusBarColor: hex,
-        navigationBarColor: hex,
+        statusBarColor: dark ? '#121417' : '#F7F8FA',
+        navigationBarColor: dark ? '#121417' : '#F7F8FA',
         statusBarContentColor: dark ? '#FFFFFF' : '#000000',
         navigationBarContentColor: dark ? '#FFFFFF' : '#000000'
       });
