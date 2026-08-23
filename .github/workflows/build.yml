@@ -63,16 +63,15 @@ jobs:
             exit 1
           fi
           mkdir -p "$CLT_DIR"
-          curl -fsSL -o "$CLT_DIR/pkg.zip" "$URL"
+          # 并行下载主包 + 各卷（GitHub runner 单连接限速，并行显著提速）
+          curl -fsSL -o "$CLT_DIR/pkg.zip" "$URL" &
           for vol in 1 2 3 4 5 6 7 8; do
             n=$(printf "%02d" $vol)
-            if curl -fsSL -o "$CLT_DIR/pkg.zip.z$n" "${URL%.zip}.z$n"; then
-              echo "downloaded volume z$n"
-            else
-              rm -f "$CLT_DIR/pkg.zip.z$n"
-              break
-            fi
+            curl -fsSL -o "$CLT_DIR/pkg.zip.z$n" "${URL%.zip}.z$n" &
           done
+          wait || true
+          # 清理失败/多余小卷
+          find "$CLT_DIR" -maxdepth 1 -name "pkg.zip.z*" -size -1M -delete 2>/dev/null || true
           cd "$CLT_DIR"
           if ls pkg.zip.z* >/dev/null 2>&1; then
             zip -s 0 pkg.zip --out clt.zip
@@ -129,16 +128,15 @@ jobs:
           SHA="${CLT_SHA_INPUT:-${CLT_SHA_VAR:-}}"
           [ -n "$URL" ] || { echo "::error::CLT_URL 未配置"; exit 1; }
           mkdir -p "$CLT_DIR"
-          curl -fsSL -o "$CLT_DIR/pkg.zip" "$URL"
+          # 并行下载主包 + 各卷（GitHub runner 单连接限速，并行显著提速）
+          curl -fsSL -o "$CLT_DIR/pkg.zip" "$URL" &
           for vol in 1 2 3 4 5 6 7 8; do
             n=$(printf "%02d" $vol)
-            if curl -fsSL -o "$CLT_DIR/pkg.zip.z$n" "${URL%.zip}.z$n"; then
-              echo "downloaded volume z$n"
-            else
-              rm -f "$CLT_DIR/pkg.zip.z$n"
-              break
-            fi
+            curl -fsSL -o "$CLT_DIR/pkg.zip.z$n" "${URL%.zip}.z$n" &
           done
+          wait || true
+          # 清理失败/多余小卷
+          find "$CLT_DIR" -maxdepth 1 -name "pkg.zip.z*" -size -1M -delete 2>/dev/null || true
           cd "$CLT_DIR"
           if ls pkg.zip.z* >/dev/null 2>&1; then
             zip -s 0 pkg.zip --out clt.zip
