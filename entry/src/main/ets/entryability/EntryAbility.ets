@@ -46,6 +46,9 @@ export default class EntryAbility extends UIAbility {
   onConfigurationUpdate(newConfig: Configuration): void {
     hilog.info(DOMAIN, TAG, 'onConfigurationUpdate: colorMode=%{public}d', newConfig.colorMode ?? -1);
     this.applySystemBarStyle();
+    // 深浅色同步给 WebShell（Web.darkMode Auto + forceDarkAccess 生效）
+    const isDark = newConfig.colorMode === ConfigurationConstant.ColorMode.COLOR_MODE_DARK;
+    AppStorage.setOrCreate('osThemeIsDark', isDark);
   }
 
   onWindowStageDestroy(): void {

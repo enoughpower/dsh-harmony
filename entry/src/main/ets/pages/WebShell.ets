@@ -453,6 +453,8 @@ struct WebShell {
           } else {
             Web({ src: this.url, controller: this.controller })
               .javaScriptAccess(true)
+              .darkMode(WebDarkMode.Auto)
+              .forceDarkAccess(true)
               .domStorageAccess(true)
               .zoomAccess(false)
               .overScrollMode(OverScrollMode.NEVER)
