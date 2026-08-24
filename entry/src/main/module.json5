@@ -28,20 +28,20 @@
         "name": "ohos.permission.READ_WRITE_DOWNLOAD_DIRECTORY",
         "reason": "$string:download_permission_reason",
         "usedScene": {
+          "when": "inuse",
           "abilities": [
             "EntryAbility"
-          ],
-          "when": "inuse"
+          ]
         }
       },
       {
         "name": "ohos.permission.CAMERA",
         "reason": "$string:camera_permission_reason",
         "usedScene": {
+          "when": "inuse",
           "abilities": [
             "EntryAbility"
-          ],
-          "when": "inuse"
+          ]
         }
       }
     ],

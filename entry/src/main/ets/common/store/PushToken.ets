@@ -78,6 +78,15 @@ export class PushToken {
       return;
     }
     const base = list[0].url.replace(/\/+$/, '');
+    // 上报给电脑端推送服务（独立进程 :3082；从连接地址取主机、换端口）
+    let host: string = '';
+    const protoEnd = base.indexOf('://');
+    if (protoEnd >= 0) {
+      let rest = base.substring(protoEnd + 3);
+      const colon = rest.indexOf(':');
+      host = colon >= 0 ? rest.substring(0, colon) : rest;
+    }
+    const reportBase = host.length > 0 ? 'http://' + host + ':3082' : base;
     const rpc: PushTokenRpc = {
       'type': 'client-request',
       'rpcId': 'push-token-' + Date.now(),
@@ -95,7 +104,7 @@ export class PushToken {
         'connectTimeout': 5000,
         'readTimeout': 5000
       };
-      const resp: http.HttpResponse = await req.request(base + '/api/push.token', options);
+      const resp: http.HttpResponse = await req.request(reportBase + '/api/push.token', options);
       hilog.info(DOMAIN, TAG, 'push.token report code=%{public}d', resp.responseCode);
     } catch (e) {
       const be = e as BusinessError;
