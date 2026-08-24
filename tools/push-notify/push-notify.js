@@ -115,7 +115,7 @@ const stallMap = new Map();     // sessionId -> {count, notified}
 const sessionMeta = new Map();  // sessionId -> {title, objective}
 let baseline = false;
 const POLL_MS = 5000;
-const STALL_MS = 90 * 1000;
+const STALL_MS = 120 * 1000;
 const STALL_LIMIT = 5;
 
 async function ensureDshToken() {
