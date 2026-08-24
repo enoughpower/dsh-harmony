@@ -13,6 +13,7 @@ import { CardSync } from '../common/store/CardSync';
 import { AppPrefs } from '../common/store/AppPrefs';
 import { WindowBar } from '../common/utils/WindowBar';
 import { PocketApi, LatestSessionInfo, SessionQueryResult } from '../common/utils/PocketApi';
+import { http } from '@kit.NetworkKit';
 
 const DOMAIN = 0x0000;
 const TAG = 'DSHHarmony';
@@ -30,6 +31,10 @@ struct Index {
   @State latestSession: LatestSessionInfo | null = null;
   @State sessionLoading: boolean = false;
   @State sessionError: string = '';
+  @State pushOnline: boolean = false;
+  @State pushChecking: boolean = false;
+  private pushTimer: number = -1;
+  private sessionTimer: number = -1;
   private store: ConnectionStore = new ConnectionStore();
   /** 会话内是否已自动连接过（防止 WebShell 返回时重复拉/自动拉回） */
   private autoConnected: boolean = false;
@@ -69,6 +74,18 @@ struct Index {
     });
     // 最新会话卡片（首页展示）
     this.refreshSession();
+    // 电脑端推送服务在线状态（立即 + 15s 轮询）
+    this.checkPushStatus();
+    if (this.pushTimer < 0) {
+      this.pushTimer = setInterval(() => {
+        this.checkPushStatus();
+      }, 15000);
+    }
+    if (this.sessionTimer < 0) {
+      this.sessionTimer = setInterval(() => {
+        this.refreshSession();
+      }, 30000);
+    }
     // 服务卡片点击直达：消费 pendingDshUrl 并跳转 WebShell
     const pending = AppStorage.get<string>('pendingDshUrl');
     if (pending !== undefined && pending !== null && pending.length > 0) {
@@ -78,6 +95,17 @@ struct Index {
     }
     // 进入 App 自动连接最近使用的 IP（开关开启时；会话内一次）
     this.maybeAutoConnect();
+  }
+
+  onPageHide(): void {
+    if (this.pushTimer >= 0) {
+      clearInterval(this.pushTimer);
+      this.pushTimer = -1;
+    }
+    if (this.sessionTimer >= 0) {
+      clearInterval(this.sessionTimer);
+      this.sessionTimer = -1;
+    }
   }
 
   /** 自动连接判定：开关已读取、开关为开、会话内未连接过、且有历史记录时执行 */
@@ -122,6 +150,52 @@ struct Index {
       hilog.warn(DOMAIN, TAG, 'save connection failed: %{public}s', e.message);
     });
     router.pushUrl({ url: 'pages/WebShell', params: { 'url': url } });
+  }
+
+  /** 检查电脑端推送服务在线状态（GET host:3082/api/status，3s 超时） */
+  private checkPushStatus(): void {
+    if (this.pushChecking) {
+      return;
+    }
+    this.pushChecking = true;
+    const ctx = this.getUIContext().getHostContext() as common.UIAbilityContext;
+    this.store.loadAll(ctx).then((list: ConnectionProfile[]) => {
+      if (list.length === 0) {
+        this.pushOnline = false;
+        this.pushChecking = false;
+        return;
+      }
+      const base = list[0].url.replace(/\/+$/, '');
+      let host: string = '';
+      const protoEnd = base.indexOf('://');
+      if (protoEnd >= 0) {
+        let rest = base.substring(protoEnd + 3);
+        const colon = rest.indexOf(':');
+        host = colon >= 0 ? rest.substring(0, colon) : rest;
+      }
+      if (host.length === 0) {
+        this.pushOnline = false;
+        this.pushChecking = false;
+        return;
+      }
+      const req = http.createHttp();
+      const options: http.HttpRequestOptions = {
+        'method': http.RequestMethod.GET,
+        'connectTimeout': 3000,
+        'readTimeout': 3000
+      };
+      req.request('http://' + host + ':3082/api/status', options).then((resp: http.HttpResponse) => {
+        this.pushOnline = resp.responseCode === 200;
+      }).catch(() => {
+        this.pushOnline = false;
+      }).finally(() => {
+        req.destroy();
+        this.pushChecking = false;
+      });
+    }).catch(() => {
+      this.pushOnline = false;
+      this.pushChecking = false;
+    });
   }
 
   /** 拉取最新会话（首页展示；LAN PIN 登录 + session.list） */
@@ -264,6 +338,23 @@ struct Index {
     .width('100%')
   }
 
+  /** 电脑端推送服务在线状态 */
+  @Builder
+  PushStatusRow() {
+    Row({ space: 8 }) {
+      Circle()
+        .width(8)
+        .height(8)
+        .fill(this.pushOnline ? '#34C759' : '#FF3B30')
+      Text(this.pushOnline ? '推送服务在线' : '推送服务离线')
+        .fontSize(12)
+        .fontColor($r('app.color.text_secondary'))
+      Blank()
+    }
+    .width('100%')
+    .padding({ left: 4, right: 4 })
+  }
+
   @Builder
   LatestSessionCard() {
     Column({ space: 10 }) {
@@ -277,13 +368,6 @@ struct Index {
           LoadingProgress()
             .width(16)
             .height(16)
-        } else {
-          Text('刷新')
-            .fontSize(13)
-            .fontColor($r('app.color.primary'))
-            .onClick(() => {
-              this.refreshSession();
-            })
         }
       }
       .width('100%')
@@ -389,6 +473,8 @@ struct Index {
   MainContent() {
     Column({ space: 16 }) {
       this.Header()
+
+      this.PushStatusRow()
 
       this.LatestSessionCard()
 

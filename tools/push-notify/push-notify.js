@@ -234,8 +234,13 @@ function connectEventsHost() {
   ws.onerror = () => { console.log('[evt] error'); };
 }
 
-// ---- HTTP: 收手机 token ----
+// ---- HTTP: 收手机 token / 状态查询 ----
 const server = createServer((req, res) => {
+  if (req.url === '/api/status') {
+    res.writeHead(200, { 'content-type': 'application/json' });
+    res.end(JSON.stringify({ status: 'online', sender: SENDER, tokens: pushTokens.length, mux: wsRetry < 5 }));
+    return;
+  }
   if (req.url === '/api/push.token' && req.method === 'POST') {
     let body = '';
     req.on('data', (c) => { body += c; });
