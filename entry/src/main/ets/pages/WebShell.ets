@@ -34,12 +34,19 @@ struct WebShell {
   @State failed: boolean = false;
   @State failText: string = '';
   @State wide: boolean = false;
+  @StorageLink('osThemeIsDark') @Watch('onThemeChange') osThemeIsDark: boolean = false;
   private controller: webview.WebviewController = new webview.WebviewController();
 
-  /** WebShell 页面与网页背景一致：系统栏设为白色（跟随网页） */
+  /** 深浅色切换回调：刷新系统栏，与网页主题同步 */
+  onThemeChange(): void {
+    this.applyWebBar();
+  }
+
+  /** WebShell 系统栏跟随深浅色（网页随 darkMode Auto 变深时，系统栏同步深底白字） */
   private applyWebBar(): void {
     const ctx = this.getUIContext().getHostContext() as common.UIAbilityContext;
-    WindowBar.set(ctx, '#FFFFFF', '#000000');
+    const p = WindowBar.pageBackground(ctx);
+    WindowBar.set(ctx, p.bg, p.fg);
   }
 
   aboutToAppear(): void {

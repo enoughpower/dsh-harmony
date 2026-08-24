@@ -3,6 +3,8 @@
 ## 2026-08-24
 
 ### feat
+- **WebShell 跟随系统深浅色自动切换**：Web.darkMode(Auto) + forceDarkAccess（DSH 网页随手机深/浅色实时变换主题；网页无深色适配时强制变暗兜底）；onConfigurationUpdate 同步 osThemeIsDark 到 AppStorage
+- **系统栏同步深浅色**：WebShell 系统栏改为跟随主题（深色→深底白字，浅色→浅底黑字），@StorageLink('osThemeIsDark') + @Watch 切换瞬间即时刷新（此前写死白底黑字，深色下状态栏不协调）
 - 相册图片注入输入框：右下悬浮「图片」按钮（官方 systemMaterial 沉浸光感，ULTRA_THIN）→ 系统相册选择器 → ImageKit 统一转 JPEG(quality 80，兼容 HEIC/PNG/WebP，满足 DSH 单张 ≤20M) → runJavaScript 构造 File + 合成 drop 事件 → DSH 原生 onDrop 接收为图片附件（无需附件按钮）
 - Push Kit 方案推进（统一数据源/系统级推送，进行中）：
   - 手机端 PushToken.ets：pushService.getToken() 获取设备推送令牌 + 上报电脑端（已接入 EntryAbility onCreate，编译通过）
