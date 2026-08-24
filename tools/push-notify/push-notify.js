@@ -2,24 +2,28 @@
 /**
  * DSH Harmony 电脑端推送服务（方案 B：独立进程，不改 dsh-pocket）
  *
- * 功能：
- *  1. 接收手机 App 上报的 Push Token（POST /api/push.token）
- *  2. 轮询 dsh-pocket 的 session.list，检测任务进度变化
- *  3. 任务 开始/进度/完成 时，调华为 Push REST API 推送到手机
+ * 推送策略（仅三场景推送，其他一律不推）：
+ *  1. 会话结束 → 推送汇报（完成/已结束 + 目标 + 轮/步统计）
+ *  2. 异常/长时间无响应 → updatedAt 停滞超阈值且连续无响应 >5 次，推送 ⏰ 提醒
+ *  3. 会话中途收集信息 → events.mux 事件流（打开即回放 pending question + 实时推送）
  *
- * 前置（AGC）：
- *   - 华为 AGC 创建应用（bundleName: com.dsh.lite），开通推送服务
- *   - 拿到 AppID / AppSecret → 写入配置或环境变量
- *   - 手机 App 已集成 Push Kit 并上报 token（见 entry/.../PushToken.ets）
+ * 发送通道：SENDER=test（默认，临时异常测试渠道）| huawei（华为 AGC，需手机 push token）
+ * 发送节流：串行队列 + 3.1s 间隔（测试通道限流 3 秒 1 条）
  *
- * 运行：node tools/push-notify/push-notify.js
- * 环境变量：PUSH_APP_ID / PUSH_APP_SECRET / DSH_BASE / DSH_PIN / DSH_TOKEN
+ * 运行：node --env-file=.env tools/push-notify/push-notify.js
+ * 环境变量：SENDER / TEST_NICK / TEST_ICON / PUSH_APP_ID / PUSH_APP_SECRET / DSH_BASE / DSH_PIN
  */
 import { createServer } from 'node:http';
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 
 const APP_ID = process.env.PUSH_APP_ID || '';
 const APP_SECRET = process.env.PUSH_APP_SECRET || '';
+// 临时异常测试渠道（SENDER=test）；SENDER=huawei 用华为 AGC 自有推送
+const SENDER = process.env.SENDER || 'test';
+const TEST_NICK = process.env.TEST_NICK || '';
+// 通知图标（216x216 PNG 公网 URL；可用 TEST_ICON 覆盖）
+const TEST_ICON = process.env.TEST_ICON ||
+  'https://raw.githubusercontent.com/enoughpower/dsh-harmony/master/assets/app-icon-216.png';
 const DSH_BASE = (process.env.DSH_BASE || 'http://127.0.0.1:3081').replace(/\/+$/, '');
 const DSH_PIN = process.env.DSH_PIN || '11111111';
 
@@ -34,7 +38,7 @@ function loadTokens() {
 }
 function saveTokens() { writeFileSync(TOKEN_FILE, JSON.stringify(pushTokens, null, 2)); }
 
-// ---- 华为 Push API ----
+// ---- 华为 Push API（SENDER=huawei） ----
 let accessTokenCache = { token: '', expiresAt: 0 };
 
 async function huaweiAccessToken() {
@@ -75,24 +79,66 @@ async function huaweiSend(title, body) {
   console.log('[push] send ->', res.status, JSON.stringify(data).slice(0, 200));
 }
 
-// ---- dsh-pocket 会话轮询 ----
+// ---- 临时异常测试渠道（SENDER=test） ----
+async function testSend(title, body) {
+  if (!TEST_NICK) { console.log('[push] 测试渠道昵称未配置，跳过'); return; }
+  console.log('[push] send [' + String(title).slice(0, 24) + '] ' + String(body).slice(0, 40).replace(/\s+/g, ' '));
+  const params = { title: String(title).slice(0, 80), msg: String(body).slice(0, 500) };
+  if (TEST_ICON) params.imgUrl = TEST_ICON;
+  const res = await fetch('https://api.chuckfang.com/' + TEST_NICK, {
+    method: 'POST',
+    headers: { 'content-type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams(params),
+  });
+  const data = await res.json();
+  console.log('[push] test send ->', JSON.stringify(data).slice(0, 160));
+}
+
+/** 发送节流队列：串行且 ≥3.1s 间隔（测试渠道限流 3 秒 1 条） */
+const sendQueue = [];
+let sending = false;
+function sendCase(title, body) {
+  sendQueue.push({ title, body });
+  drainQueue();
+}
+function drainQueue() {
+  if (sending || sendQueue.length === 0) return;
+  const item = sendQueue.shift();
+  sending = true;
+  const doSend = SENDER === 'huawei' ? huaweiSend : testSend;
+  doSend(item.title, item.body).catch(() => {}).finally(() => {
+    sending = false;
+    setTimeout(drainQueue, 3100);
+  });
+}
+
+// ---- dsh-pocket 会话轮询（仅三场景） ----
 let dshToken = '';
-let lastSig = '';
-let lastRunning = null;
-const POLL_BUSY = 5000, POLL_IDLE = 15000;
+const runningMap = new Map();   // sessionId -> true（曾运行）
+const stallMap = new Map();     // sessionId -> {count, notified}
+const sessionMeta = new Map();  // sessionId -> {title, objective}
+let baseline = false;
+const POLL_MS = 5000;
+const STALL_MS = 90 * 1000;
+const STALL_LIMIT = 5;
 
 async function ensureDshToken() {
   if (dshToken) return dshToken;
+  // 登录表单字段名为 token（PIN 值）；成功后 Set-Cookie: dsh_pocket_token
   const res = await fetch(DSH_BASE + '/pocket-login', {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ pin: DSH_PIN }),
+    headers: { 'content-type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({ token: DSH_PIN }),
     redirect: 'manual',
   });
-  if (res.status === 302 || res.status === 200) {
-    const setCookie = res.headers.get('set-cookie') || '';
-    const m = setCookie.match(/dsh_pocket_token=([^;]+)/);
-    if (m) dshToken = m[1];
+  const setCookie = res.headers.get('set-cookie') || '';
+  const m = setCookie.match(/dsh_pocket_token=([^;]+)/);
+  if (m) {
+    dshToken = m[1];
+    console.log('[poll] dsh token OK');
+    connectEventsHost();
+  } else {
+    console.log('[poll] login status=' + res.status);
   }
   return dshToken;
 }
@@ -108,25 +154,88 @@ async function poll() {
     });
     const j = await res.json();
     const items = j.result?.value?.items || [];
-    const it = items[0];
-    if (!it) return;
-    const s = it.projections?.values || {};
-    const sig = it.sessionId + '|' + it.running + '|' + (s.sessionStats?.turns || 0);
-    if (lastSig === '') { lastSig = sig; lastRunning = it.running; return; }
-    const prevRunning = lastRunning;
-    const changed = sig !== lastSig;
-    lastSig = sig; lastRunning = it.running;
-    if (!changed) return;
-    const title = (s.title || 'DSH 任务').slice(0, 40);
-    const meta = (s.sessionStats ? (s.sessionStats.turns || 0) + ' 轮 · ' + (s.sessionStats.steps || 0) + ' 步' : '');
-    if (prevRunning === false && it.running) await huaweiSend(title, '▶ 进行中 · ' + meta);
-    else if (prevRunning === true && !it.running) await huaweiSend(title, '■ 已完成 · ' + meta);
-    else await huaweiSend(title, '▶ 进行中 · ' + meta);
+    if (items.length === 0) return;
+
+    for (const it of items) {
+      const sid = it.sessionId;
+      const s = it.projections?.values || {};
+      const title = (s.title || 'DSH 任务').slice(0, 40);
+      sessionMeta.set(sid, { title, objective: String(s.goal?.goal?.objective || '').slice(0, 60) });
+
+      if (!baseline) {
+        if (it.running) runningMap.set(sid, true);
+        continue;
+      }
+
+      // 场景1/2·结束：曾运行 -> 现在不运行，推送汇报
+      if (runningMap.has(sid) && !it.running) {
+        runningMap.delete(sid);
+        stallMap.delete(sid);
+        const meta = (s.sessionStats ? (s.sessionStats.turns || 0) + ' 轮 · ' + (s.sessionStats.steps || 0) + ' 步' : '');
+        const phase = s.goal?.goal?.phase || '';
+        const done = (phase === 'complete');
+        const lines = [done ? '✅ 任务完成汇报' : '⚠️ 会话已结束'];
+        const objective = String(s.goal?.goal?.objective || '').slice(0, 60);
+        if (objective) lines.push('目标：' + objective);
+        if (meta) lines.push('统计：' + meta);
+        await sendCase(title, lines.join(String.fromCharCode(10)));
+      } else if (it.running) {
+        runningMap.set(sid, true);
+        // 场景2·超时：运行中但 updatedAt 停滞（连续 >5 次无响应）
+        const stallMs = it.updatedAt ? Date.now() - Number(it.updatedAt) : 0;
+        let st = stallMap.get(sid) || { count: 0, notified: false };
+        if (stallMs > STALL_MS) {
+          st.count += 1;
+          if (st.count > STALL_LIMIT && !st.notified) {
+            st.notified = true;
+            await sendCase(title, '⏰ 长时间无响应 · 已超过 ' + Math.round(stallMs / 1000) + 's（可能异常/卡住）');
+          }
+        } else {
+          st.count = 0;
+        }
+        stallMap.set(sid, st);
+      }
+    }
+    baseline = true;
   } catch (e) {
     console.log('[poll] err', e.message);
   } finally {
-    setTimeout(poll, (lastRunning === true ? POLL_BUSY : POLL_IDLE));
+    setTimeout(poll, POLL_MS);
   }
+}
+
+// ---- 事件流订阅（场景3：会话中途收集信息） ----
+let wsRetry = 0;
+function connectEventsHost() {
+  const u = new URL(DSH_BASE);
+  const wsUrl = 'ws://' + u.host + '/api/events.mux?token=' + encodeURIComponent(dshToken);
+  const ws = new WebSocket(wsUrl);
+  ws.onopen = () => { console.log('[evt] events.mux connected'); wsRetry = 0; };
+  ws.onmessage = (ev) => {
+    try {
+      const raw = typeof ev.data === 'string' ? ev.data : String(ev.data);
+      const msg = JSON.parse(raw);
+      const frame = msg?.payload && typeof msg.payload === 'object' ? msg.payload : msg;
+      if (!frame || typeof frame !== 'object') return;
+      if (frame.type === 'question/requested') {
+        const meta = sessionMeta.get(frame.sessionId) || {};
+        const q = (frame.questions || [])[0];
+        const qText = q ? (q.question || q.header || '请回复') : '请回复';
+        sendCase(meta.title || 'DSH 任务', '📩 需要你提供信息：' + String.fromCharCode(10) + qText.slice(0, 200));
+      } else if (frame.type === 'approval/requested') {
+        const meta = sessionMeta.get(frame.sessionId) || {};
+        sendCase(meta.title || 'DSH 任务', '🛂 需要你批准：' + String(frame.toolName || '工具调用') +
+          (frame.reason ? String.fromCharCode(10) + frame.reason : ''));
+      }
+    } catch (e) {
+      console.log('[evt] parse err', e.message);
+    }
+  };
+  ws.onclose = () => {
+    console.log('[evt] closed, retry=' + wsRetry);
+    if (wsRetry < 5) { wsRetry++; setTimeout(connectEventsHost, 5000 * wsRetry); }
+  };
+  ws.onerror = () => { console.log('[evt] error'); };
 }
 
 // ---- HTTP: 收手机 token ----
