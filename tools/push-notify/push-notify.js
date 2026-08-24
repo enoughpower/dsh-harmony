@@ -167,14 +167,11 @@ async function poll() {
       if (runningMap.has(sid) && !it.running) {
         runningMap.delete(sid);
         stallMap.delete(sid);
-        const meta = (s.sessionStats ? (s.sessionStats.turns || 0) + ' 轮 · ' + (s.sessionStats.steps || 0) + ' 步' : '');
         const phase = s.goal?.goal?.phase || '';
         const done = (phase === 'complete');
-        const lines = [done ? '✅ 任务完成汇报' : '⚠️ 会话已结束'];
-        const objective = String(s.goal?.goal?.objective || '').slice(0, 60);
-        if (objective) lines.push('目标：' + objective);
-        if (meta) lines.push('统计：' + meta);
-        await sendCase(title, lines.join(String.fromCharCode(10)));
+        const summary = await sessionSummary(sid);
+        const head = done ? '✅ 任务完成' : '⚠️ 会话已结束';
+        await sendCase(title, summary ? head + '：' + summary : head);
       } else if (it.running) {
         runningMap.set(sid, true);
         // 场景2·超时：运行中但 updatedAt 停滞（连续 >5 次无响应）
@@ -198,6 +195,38 @@ async function poll() {
   } finally {
     setTimeout(poll, POLL_MS);
   }
+}
+
+// ---- 会话总结（结束汇报一句话） ----
+async function sessionSummary(sid) {
+  try {
+    const res = await fetch(DSH_BASE + '/api/session.history?token=' + encodeURIComponent(dshToken), {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ type: 'client-request', rpcId: 'h-' + Date.now(), method: 'session.history', payload: { sessionId: sid, maxMessages: 20 } }),
+    });
+    const j = await res.json();
+    const events = j?.result?.value?.events || [];
+    for (let i = events.length - 1; i >= 0; i--) {
+      const e = events[i]?.event;
+      if (e && (e.type === 'assistant/message' || e.type === 'message')) {
+        const m = e.data?.message || e.message || {};
+        if (m.role === 'assistant') {
+          const parts = Array.isArray(m.content) ? m.content : [];
+          const text = parts.filter((p) => p && p.type === 'text')
+            .map((p) => String(p.text || '')).join(' ').trim();
+          if (text) return cleanSummary(text);
+        }
+      }
+    }
+  } catch (e) { }
+  return '';
+}
+function cleanSummary(t) {
+  // 去代码块/多余空白 → 单行截断 80
+  let s = String(t).replace(/```[sS]*?```/g, ' ').replace(/\s+/g, ' ').trim();
+  if (s.length > 80) s = s.slice(0, 80) + '…';
+  return s;
 }
 
 // ---- 事件流订阅（场景3：会话中途收集信息） ----
