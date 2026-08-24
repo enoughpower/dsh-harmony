@@ -19,6 +19,12 @@ A **native HarmonyOS client for DeepSeek Harness**, designed to work with the [d
 - 📇 **Service widget**: desktop widget shows connection status, last-used time and the latest session; tap to open DSH
 - 🛡️ **Privacy-friendly**: only connection URLs are stored; PINs/credentials never persisted; one-tap clear for web data and history
 - 🔧 **Full toolchain**: CLI build / on-device smoke tests / Hypium unit tests / GitHub Actions CI
+## Screenshots
+
+| Home (latest session / one-tap connect) | Settings (connection / web data) | Chat (agent conversation) |
+| --- | --- | --- |
+| ![Home](docs/screenshots/home.png) | ![Settings](docs/screenshots/settings.png) | ![Chat](docs/screenshots/chat.png) |
+
 ## How it works
 
 ```

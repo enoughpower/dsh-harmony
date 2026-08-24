@@ -22,6 +22,12 @@ DeepSeek Harness 的 **HarmonyOS 原生客户端**，与 [dsh-pocket](https://gi
 - 🛡️ **隐私友好**：只存连接地址，PIN / 凭证不落盘；设置页可一键清空 Web 数据与历史
 - 🔧 **完整工具链**：命令行构建 / 真机冒烟 / Hypium 单测 / GitHub Actions CI
 
+## 界面截图
+
+| 首页（最新会话 / 一键连接） | 设置（连接 / Web 数据） | 对话（Agent 聊天） |
+| --- | --- | --- |
+| ![首页](docs/screenshots/home.png) | ![设置](docs/screenshots/settings.png) | ![对话](docs/screenshots/chat.png) |
+
 ## 工作原理
 
 ```
