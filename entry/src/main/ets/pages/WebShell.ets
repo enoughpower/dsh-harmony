@@ -510,11 +510,19 @@ struct WebShell {
               .multiWindowAccess(true)
               .allowWindowOpenMethod(true)
               .onWindowNew((event: OnWindowNewEvent) => {
-                // 单窗口策略：新窗口 URL 在当前 Web 中加载（DSH 导出预览等）
+                // 单窗口策略：DSH 域内 URL 在当前 Web 加载；外部域名交给系统浏览器（避免经 dsh-pocket 代理失败）
                 const newUrl = event.targetUrl ?? '';
                 hilog.info(DOMAIN, TAG, 'window.open request: %{public}s', newUrl);
                 if (newUrl.length > 0) {
-                  this.controller.loadUrl(newUrl);
+                  const baseHost = UrlUtils.hostOf(this.url);
+                  const extHost = UrlUtils.hostOf(newUrl);
+                  if (baseHost.length > 0 && extHost !== baseHost) {
+                    const ctx = this.getUIContext().getHostContext() as common.UIAbilityContext;
+                    ctx.openLink(newUrl).catch(() => {
+                    });
+                  } else {
+                    this.controller.loadUrl(newUrl);
+                  }
                 }
                 event.handler.setWebController(null);
               })
