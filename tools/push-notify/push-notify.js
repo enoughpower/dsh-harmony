@@ -11,7 +11,7 @@
  * 发送节流：串行队列 + 3.1s 间隔（测试通道限流 3 秒 1 条）
  *
  * 运行：node --env-file=.env tools/push-notify/push-notify.js
- * 环境变量：SENDER / TEST_NICK / TEST_ICON / PUSH_APP_ID / PUSH_APP_SECRET / DSH_BASE / DSH_PIN
+ * 环境变量：SENDER / TEST_NICK / PUSH_APP_ID / PUSH_APP_SECRET / DSH_BASE / DSH_PIN
  */
 import { createServer } from 'node:http';
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
@@ -21,9 +21,6 @@ const APP_SECRET = process.env.PUSH_APP_SECRET || '';
 // 临时异常测试渠道（SENDER=test）；SENDER=huawei 用华为 AGC 自有推送
 const SENDER = process.env.SENDER || 'test';
 const TEST_NICK = process.env.TEST_NICK || '';
-// 通知图标（216x216 PNG 公网 URL；可用 TEST_ICON 覆盖）
-const TEST_ICON = process.env.TEST_ICON ||
-  'https://raw.githubusercontent.com/enoughpower/dsh-harmony/master/assets/app-icon-216.png';
 const DSH_BASE = (process.env.DSH_BASE || 'http://127.0.0.1:3081').replace(/\/+$/, '');
 const DSH_PIN = process.env.DSH_PIN || '11111111';
 
@@ -84,7 +81,6 @@ async function testSend(title, body) {
   if (!TEST_NICK) { console.log('[push] 测试渠道昵称未配置，跳过'); return; }
   console.log('[push] send [' + String(title).slice(0, 24) + '] ' + String(body).slice(0, 40).replace(/\s+/g, ' '));
   const params = { title: String(title).slice(0, 80), msg: String(body).slice(0, 500) };
-  if (TEST_ICON) params.imgUrl = TEST_ICON;
   const res = await fetch('https://api.chuckfang.com/' + TEST_NICK, {
     method: 'POST',
     headers: { 'content-type': 'application/x-www-form-urlencoded' },
