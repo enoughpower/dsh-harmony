@@ -29,3 +29,11 @@ Thumbs.db
 
 # 视觉分析工具工作目录
 .dsh-vision-router/
+
+# ---- 敏感数据：一律不上传 git ----
+certs/
+**/.release-pass
+*.pass
+tools/push-notify/.env
+tools/push-notify/tokens.json
+**/rawfile/agconnect-services.json

@@ -1,7 +1,17 @@
 # DSH Harmony 任务进度推送方案（Push Kit）
 
-> 状态：**方案规划**（2026-08-24，未实施）
+> 状态：**方案推进中**（2026-08-24，代码已就绪，待 AGC 凭证）
 > 目标：手机 App 在**后台/被杀**时也能收到 DSH 任务进度通知（开始/进度/完成）
+>
+> ### 已完成（代码就绪，未提交）
+> - 手机端：`entry/.../common/store/PushToken.ets` —— `pushService.getToken()` 取 token + POST 上报电脑端（已接入 EntryAbility.onCreate，编译通过）
+> - 电脑端：`tools/push-notify/push-notify.js` —— 收 token + 轮询 session.list + 调华为 Push API（Node 内置 fetch，无额外依赖）
+> - 方案：B（独立推送服务，不改 dsh-pocket）
+>
+> ### 待办（需用户）
+> 1. 华为 AGC 注册 → 创建应用（bundleName: com.dsh.lite）→ 开通推送服务
+> 2. 拿 AppID / AppSecret → 设环境变量 `PUSH_APP_ID` / `PUSH_APP_SECRET`
+> 3. 启动电脑端 `node tools/push-notify/push-notify.js`，手机 App 开机后自动上报 token
 
 ## 1. 背景与问题
 

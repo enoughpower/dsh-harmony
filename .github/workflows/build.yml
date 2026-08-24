@@ -4,9 +4,10 @@ name: CI
 #   裁 previewer/native/tool 均报 00303168；hap-sign-tool 在 sdk/openharmony/toolchains/lib）。
 #   压缩后最小 ~1.96GiB（.tar.zst），但 GitHub runner 下载大文件（≥1.96G）实测极慢/失联
 #   （平台网络限制，与文件大小无关）。
-# 因此 CI 拆两层：
-#   - push / PR → verify（轻量，秒绿；完整构建见 dispatch，避免每次 push 依赖慢速大下载）
-#   - tag v* / workflow_dispatch → 完整构建 + 签名 + 发布（下载工具链）
+# CI 职责（2026-08-24 起）：
+#   - push / PR / tag → verify（秒绿）+ 完整构建（self-hosted Mac 本机工具链，零下载）
+#   - 不再做签名发布（release job 已移除）：GitHub Release 产物走本地上传（不签名包）；
+#     发布证书签名材料与 scripts/sign-release.sh 保留在仓库本地备用
 
 on:
   push:
@@ -65,83 +66,3 @@ jobs:
           export PATH="/Users/dale/.nvm/versions/node/v22.19.0/bin:/Users/dale/.harmony/command-line-tools-mac26/ohpm/bin:/Users/dale/.harmony/command-line-tools-mac26/hvigor/bin:$PATH"
           hvigorw --mode module -p module=entry@default -p buildMode=debug assembleHap --no-daemon
 
-  release:
-    name: Build release + sign + publish
-    if: startsWith(github.ref, 'refs/tags/v')
-    needs: build
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Restore toolchain cache
-        id: clt-cache
-        uses: actions/cache@v4
-        with:
-          path: ${{ runner.temp }}/harmony-clt/command-line-tools
-          key: harmony-clt-26-v1
-
-      - name: Install HarmonyOS command-line tools (cache miss)
-        if: steps.clt-cache.outputs.cache-hit != 'true'
-        env:
-          CLT_DIR: ${{ runner.temp }}/harmony-clt
-        run: |
-          set -euo pipefail
-          URL="${CLT_URL_INPUT:-${CLT_URL_VAR:-}}"
-          [ -n "$URL" ] || { echo "::error::CLT_URL 未配置"; exit 1; }
-          mkdir -p "$CLT_DIR"
-          curl -fsSL -o "$CLT_DIR/clt.tgz" "$URL"
-          tar --zstd -xf "$CLT_DIR/clt.tgz" -C "$CLT_DIR"
-
-      - name: Install dependencies
-        env:
-          CLT_DIR: ${{ runner.temp }}/harmony-clt
-        run: |
-          export PATH="$CLT_DIR/command-line-tools/ohpm/bin:$CLT_DIR/command-line-tools/hvigor/bin:$PATH"
-          ohpm install --all
-
-      - name: Build release HAP
-        env:
-          CLT_DIR: ${{ runner.temp }}/harmony-clt
-          DEVECO_SDK_HOME: ${{ runner.temp }}/harmony-clt/command-line-tools/sdk
-        run: |
-          export PATH="$CLT_DIR/command-line-tools/ohpm/bin:$CLT_DIR/command-line-tools/hvigor/bin:$PATH"
-          hvigorw --mode module -p module=entry@default -p buildMode=release assembleHap --no-daemon
-
-      - name: Sign HAP (if secrets present)
-        id: sign
-        if: env.SIGNING_KEY != '' && env.SIGNING_CERT != '' && env.SIGNING_PROFILE != ''
-        env:
-          SIGNING_KEY: ${{ secrets.SIGNING_KEY }}
-          SIGNING_CERT: ${{ secrets.SIGNING_CERT }}
-          SIGNING_PROFILE: ${{ secrets.SIGNING_PROFILE }}
-        run: |
-          set -euo pipefail
-          HAP=$(find entry/build -name 'entry-default.hap' | head -1)
-          [ -n "$HAP" ] || { echo "::error::HAP not found"; exit 1; }
-          echo "$SIGNING_KEY" | base64 -d > /tmp/key.p12
-          echo "$SIGNING_CERT" | base64 -d > /tmp/cert.cer
-          echo "$SIGNING_PROFILE" | base64 -d > /tmp/profile.p7b
-          SIGN_TOOL=$(find "$CLT_DIR" -name 'hap-sign-tool.jar' 2>/dev/null | head -1)
-          [ -n "$SIGN_TOOL" ] || { echo "::error::hap-sign-tool.jar not found"; exit 1; }
-          java -jar "$SIGN_TOOL" sign-app \
-            -keyAlias "${{ secrets.KEY_ALIAS }}" \
-            -signAlg "SHA256withECDSA" \
-            -mode "localSign" \
-            -appCertFile /tmp/cert.cer \
-            -profileFile /tmp/profile.p7b \
-            -inFile "$HAP" \
-            -keystoreFile /tmp/key.p12 \
-            -outFile "${HAP%.hap}-signed.hap" \
-            -keyPwd "${{ secrets.KEY_PASSWORD }}" \
-            -keystorePwd "${{ secrets.KEYSTORE_PASSWORD }}" \
-            -signCode "1"
-          echo "signed=${HAP%.hap}-signed.hap" >> $GITHUB_OUTPUT
-
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
-        with:
-          files: |
-            entry/build/default/outputs/default/*.hap
-          generate_release_notes: true

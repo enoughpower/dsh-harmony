@@ -12,6 +12,10 @@ A **native HarmonyOS client for DeepSeek Harness**, designed to work with the [d
 - ⚡ **Auto-connect**: with the setting on, each app launch auto-connects the most recent IP (no scan needed)
 - 📥 **Export auto-save**: session-log exports land in the phone's Downloads automatically (zero dialogs; under Downloads/com.dsh.lite/)
 - ⚡ **Latest session at a glance**: home card and desktop widget show the latest session (title / running / turns / steps / relative time; title wraps, tap to refresh)
+- 🖼 **Album image injection**: floating glass button → pick from album → auto-converted to JPEG and injected into the DSH composer (any phone format, chat with images directly)
+- 🔔 **Push Kit (in progress)**: client Token fetch and desktop push service (tools/push-notify/) are ready; once AGC push is activated, task notifications arrive even in background/killed (design: docs/push-plan.md)
+
+> 🔑 **AGC dependency setup (not committed; required before building)**: place the downloaded `agconnect-services.json` under `entry/src/main/resources/rawfile/`; AGC credentials (AppID/key) go into `tools/push-notify/.env` (real values never committed; see `.env.example`); release signing materials live in `certs/` (gitignored — private keys must never be pushed)
 - 📇 **Service widget**: desktop widget shows connection status, last-used time and the latest session; tap to open DSH
 - 🛡️ **Privacy-friendly**: only connection URLs are stored; PINs/credentials never persisted; one-tap clear for web data and history
 - 🔧 **Full toolchain**: CLI build / on-device smoke tests / Hypium unit tests / GitHub Actions CI

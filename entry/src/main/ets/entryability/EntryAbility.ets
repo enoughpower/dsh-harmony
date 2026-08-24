@@ -1,6 +1,7 @@
 import { AbilityConstant, UIAbility, Want, Configuration, ConfigurationConstant } from '@kit.AbilityKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { window } from '@kit.ArkUI';
+import { PushToken } from '../common/store/PushToken';
 
 const DOMAIN = 0x0000;
 const TAG = 'DSHHarmony';
@@ -17,6 +18,9 @@ export default class EntryAbility extends UIAbility {
   onCreate(want: Want, launchParam: AbilityConstant.LaunchParam): void {
     hilog.info(DOMAIN, TAG, 'EntryAbility onCreate. reason=%{public}d', launchParam.launchReason);
     this.consumeCardUrl(want);
+    // Push Kit：获取设备推送令牌并上报电脑端（未在 AGC 开通时静默，报 1000900012）
+    PushToken.ensureAndReport(this.context).catch(() => {
+    });
   }
 
   onNewWant(want: Want): void {

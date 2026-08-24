@@ -1,5 +1,24 @@
 # Changelog
 
+## 2026-08-24
+
+### feat
+- 相册图片注入输入框：右下悬浮「图片」按钮（官方 systemMaterial 沉浸光感，ULTRA_THIN）→ 系统相册选择器 → ImageKit 统一转 JPEG(quality 80，兼容 HEIC/PNG/WebP，满足 DSH 单张 ≤20M) → runJavaScript 构造 File + 合成 drop 事件 → DSH 原生 onDrop 接收为图片附件（无需附件按钮）
+- Push Kit 方案推进（统一数据源/系统级推送，进行中）：
+  - 手机端 PushToken.ets：pushService.getToken() 获取设备推送令牌 + 上报电脑端（已接入 EntryAbility onCreate，编译通过）
+  - 电脑端独立推送服务 tools/push-notify/push-notify.js（Node 零依赖）：收 Token（POST /api/push.token:3082）+ 轮询 session.list + 华为 REST API 推送（oauth2/v3/token + messages:send）
+  - AGC 集成就绪：agconnect-services.json 已入工程；AppID 认证测试通过（客户端密钥 OAuth 换 access_token 成功）（access_token 获取成功）
+  - 文档 docs/push-plan.md 细化实现与待办
+
+### ci
+- 自托管 GitHub Actions runner（Mac）根治工具链下载问题：push 即完整构建（本机工具链零下载、秒级）；此前尝试 cache/并行下载/zstd 单文件均受 GitHub runner 大文件下载限制（3.5G 分卷/1.96GiB 单文件 30+ 分钟仍失败）
+- push/PR 轻量 verify（秒绿）；完整构建走 self-hosted；tag 发布完整构建+签名
+- CI 不再做签名发布（release job 移除）：GitHub Release 产物走本地上传（不签名包）；发布证书签名材料与 scripts/sign-release.sh 保留本地备用
+- 分卷发布 v0.1.1-tools → v0.1.2-tools（1.96GiB 单文件 .tar.zst）经验保留在 Release
+
+### chore
+- 回退「任务监听（通知实时进度）」全套（cac7933）：实况窗/保活受平台权益与限制不可用，改为 Push Kit 方案推进
+
 ## 2026-08-23
 
 ### feat
