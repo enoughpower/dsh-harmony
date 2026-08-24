@@ -6,7 +6,9 @@
 - 相册图片注入输入框：右下悬浮「图片」按钮（官方 systemMaterial 沉浸光感，ULTRA_THIN）→ 系统相册选择器 → ImageKit 统一转 JPEG(quality 80，兼容 HEIC/PNG/WebP，满足 DSH 单张 ≤20M) → runJavaScript 构造 File + 合成 drop 事件 → DSH 原生 onDrop 接收为图片附件（无需附件按钮）
 - Push Kit 方案推进（统一数据源/系统级推送，进行中）：
   - 手机端 PushToken.ets：pushService.getToken() 获取设备推送令牌 + 上报电脑端（已接入 EntryAbility onCreate，编译通过）
-  - 电脑端独立推送服务 tools/push-notify/push-notify.js（Node 零依赖）：收 Token（POST /api/push.token:3082）+ 轮询 session.list + 华为 REST API 推送（oauth2/v3/token + messages:send）
+  - 电脑端独立推送服务 tools/push-notify/push-notify.js（Node 零依赖）：收 Token（POST /api/push.token:3082）+ 轮询 session.list + 推送发送端支持双通道（SENDER 切换：test=临时异常测试渠道 / huawei=华为自有 REST API oauth2/v3/token + messages:send）
+  - **推送链路经临时异常测试渠道实测打通**（维护工具，非对外功能）：修复 dsh-pocket 登录（表单 token 字段）
+  - **推送策略重构（仅三场景推送）**：① 会话结束 → 汇报（完成/已结束 + 目标 + 轮步统计）② 长时间无响应（updatedAt 停滞 >90s 且连续 >5 次）→ ⏰ 提醒 ③ 会话中途收集信息（events.mux 事件流，打开即回放 pending question + 实时）→ 📩 推送；其余状态一律不推；发送串行队列 + 3.1s 节流（规避测试渠道限流 429）；多会话跟踪（不再只盯最新会话）
   - AGC 集成就绪：agconnect-services.json 已入工程；AppID 认证测试通过（客户端密钥 OAuth 换 access_token 成功）（access_token 获取成功）
   - 文档 docs/push-plan.md 细化实现与待办
 
