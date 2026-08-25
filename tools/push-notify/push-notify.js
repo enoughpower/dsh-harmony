@@ -39,7 +39,7 @@ function saveTokens() { writeFileSync(TOKEN_FILE, JSON.stringify(pushTokens, nul
 // 鉴权: 服务账号密钥(API Console 下载的 JSON) → PS256 签名 JWT → Authorization: Bearer <jwt>
 // 端点: POST https://push-api.cloud.huawei.com/v3/<projectId>/messages:send (push-type: 0 = 通知消息)
 let jwtCache = { token: '', expiresAt: 0 };
-const { createSign } = await import('node:crypto');
+const { createSign, constants } = await import('node:crypto');
 
 function b64url(s) { return Buffer.from(s).toString('base64url'); }
 
@@ -61,8 +61,8 @@ async function huaweiJwt() {
   sig.end();
   jwtCache = { token: header + '.' + payload + '.' + sig.sign({
     key: key.private_key,
-    padding: 1 /* RSA_PKCS1_PSS_PADDING */,
-    saltLength: 32 /* RSA_PSS_SALTLEN_DIGEST */,
+    padding: constants.RSA_PKCS1_PSS_PADDING,
+    saltLength: constants.RSA_PSS_SALTLEN_DIGEST,
   }).toString('base64url'), expiresAt: now + 3600 };
   return jwtCache.token;
 }

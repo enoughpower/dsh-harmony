@@ -13,6 +13,7 @@ import { UrlInputDialog } from '../components/UrlInputDialog';
 import { CardSync } from '../common/store/CardSync';
 import { AppPrefs } from '../common/store/AppPrefs';
 import { WindowBar } from '../common/utils/WindowBar';
+import { PushToken } from '../common/store/PushToken';
 import { PocketApi, LatestSessionInfo, SessionQueryResult } from '../common/utils/PocketApi';
 import { http } from '@kit.NetworkKit';
 import { notificationManager } from '@kit.NotificationKit';
@@ -178,6 +179,9 @@ struct Index {
       // 同步服务卡片（最近连接）
       CardSync.syncAll(ctx).catch(() => {
         hilog.warn(DOMAIN, TAG, 'card sync failed');
+      });
+      // 连接建立后立即上报推送 token(重装/首连场景不等冷启动)
+      PushToken.ensureAndReport(ctx).catch(() => {
       });
     }).catch((e: BusinessError) => {
       hilog.warn(DOMAIN, TAG, 'save connection failed: %{public}s', e.message);
