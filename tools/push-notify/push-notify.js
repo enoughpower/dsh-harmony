@@ -35,41 +35,61 @@ function loadTokens() {
 }
 function saveTokens() { writeFileSync(TOKEN_FILE, JSON.stringify(pushTokens, null, 2)); }
 
-// ---- 华为 Push API（SENDER=huawei） ----
-let accessTokenCache = { token: '', expiresAt: 0 };
+// ---- 华为 Push API V3（SENDER=huawei，HarmonyOS NEXT 5.x+ 必须）----
+// 鉴权: 服务账号密钥(API Console 下载的 JSON) → PS256 签名 JWT → Authorization: Bearer <jwt>
+// 端点: POST https://push-api.cloud.huawei.com/v3/<projectId>/messages:send (push-type: 0 = 通知消息)
+let jwtCache = { token: '', expiresAt: 0 };
+const { createSign } = await import('node:crypto');
 
-async function huaweiAccessToken() {
-  const now = Date.now();
-  if (accessTokenCache.token && accessTokenCache.expiresAt > now + 60_000) return accessTokenCache.token;
-  const res = await fetch('https://oauth-login.cloud.huawei.com/oauth2/v3/token', {
-    method: 'POST',
-    headers: { 'content-type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({
-      grant_type: 'client_credentials',
-      client_id: APP_ID,
-      client_secret: APP_SECRET,
-    }),
-  });
-  const data = await res.json();
-  accessTokenCache = { token: data.access_token || '', expiresAt: now + (data.expires_in || 3600) * 1000 };
-  return accessTokenCache.token;
+function b64url(s) { return Buffer.from(s).toString('base64url'); }
+
+async function huaweiJwt() {
+  const now = Math.floor(Date.now() / 1000);
+  if (jwtCache.token && jwtCache.expiresAt > now + 300) return jwtCache.token;
+  const keyFile = process.env.PUSH_KEY_FILE || '';
+  if (!keyFile) return '';
+  const key = JSON.parse(readFileSync(keyFile, 'utf8'));
+  const header = b64url(JSON.stringify({ kid: key.key_id, typ: 'JWT', alg: 'PS256' }));
+  const payload = b64url(JSON.stringify({
+    aud: 'https://oauth-login.cloud.huawei.com/oauth2/v3/token',
+    iss: key.sub_account,
+    exp: now + 3600,
+    iat: now,
+  }));
+  const sig = createSign('RSA-SHA256');
+  sig.update(header + '.' + payload);
+  sig.end();
+  jwtCache = { token: header + '.' + payload + '.' + sig.sign({
+    key: key.private_key,
+    padding: 1 /* RSA_PKCS1_PSS_PADDING */,
+    saltLength: 32 /* RSA_PSS_SALTLEN_DIGEST */,
+  }).toString('base64url'), expiresAt: now + 3600 };
+  return jwtCache.token;
 }
 
 async function huaweiSend(title, body) {
-  if (!APP_ID || !APP_SECRET) { console.log('[push] AGC 未配置 AppID/Secret，跳过发送'); return; }
+  const keyFile = process.env.PUSH_KEY_FILE || '';
+  if (!keyFile) { console.log('[push] 未配置 PUSH_KEY_FILE(V3 服务账号密钥), 跳过发送'); return; }
   if (pushTokens.length === 0) { console.log('[push] 无手机 token，跳过'); return; }
-  const token = await huaweiAccessToken();
-  if (!token) { console.log('[push] 获取 access_token 失败'); return; }
-  const res = await fetch('https://push-api.cloud.huawei.com/v1/' + APP_ID + '/messages:send', {
+  const jwt = await huaweiJwt();
+  if (!jwt) { console.log('[push] 生成 JWT 失败'); return; }
+  const key = JSON.parse(readFileSync(keyFile, 'utf8'));
+  const projectId = key.project_id;
+  const res = await fetch('https://push-api.cloud.huawei.com/v3/' + projectId + '/messages:send', {
     method: 'POST',
-    headers: { 'authorization': 'Bearer ' + token, 'content-type': 'application/json' },
+    headers: { 'authorization': 'Bearer ' + jwt, 'content-type': 'application/json', 'push-type': '0' },
     body: JSON.stringify({
-      validate_only: false,
-      message: {
-        notification: { title, body },
-        android: { notification: { title, body, click_action: { type: 3 } } },
-        token: pushTokens,
+      payload: {
+        notification: {
+          title, body,
+          // 自分类权益(AGC 审核通过, 2026-08-25): 工作事项提醒 → WORK
+          // 资讯营销类消息必须改用 MARKETING(受频次限制); 未获批场景不可冒充服务/通讯类
+          category: 'WORK',
+          clickAction: { actionType: 0 },
+        },
       },
+      target: { token: pushTokens },
+      pushOptions: { testMessage: true },
     }),
   });
   const data = await res.json();
