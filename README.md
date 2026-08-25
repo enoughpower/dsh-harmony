@@ -47,10 +47,10 @@ dsh-pocket 安装与使用见其 [README](https://github.com/shaobeichen/dsh-poc
 | 项 | 要求 |
 | --- | --- |
 | 系统 | HarmonyOS 7.0（API 版本以手机「关于本机」为准） |
-| 开发 | DevEco Studio 6.x（含 SDK / hvigor / ohpm / hdc） |
+| 开发 | DevEco Studio 6.1 + HarmonyOS SDK 26.0.0 Beta2（含 hvigor / ohpm / hdc） |
 | 设备 | 开启 USB 调试的鸿蒙手机 / 折叠屏 / 平板 |
 
-> 本工程配置：`targetSdkVersion = 6.1.1(24)`（本机 DevEco 6.1.1 SDK），`compatibleSdkVersion = 6.0.0(20)`；手机 7.0.1(25) 完全兼容运行，待工具链提供 API 25 SDK 后可升级 targetSdkVersion。
+> 本工程配置：`compileSdkVersion / targetSdkVersion = 26.0.0(26)`（SDK 26.0.0 Beta2 / API 26），`compatibleSdkVersion = 6.0.0(20)`。
 
 ## 快速开始
 
@@ -114,7 +114,7 @@ dsh-pocket 安装与使用见其 [README](https://github.com/shaobeichen/dsh-poc
 | 华为下载中心直链 | workflow_dispatch 输入框粘贴，或设置 variable `CLT_URL` / `CLT_SHA256` |
 | 本地下载 | 下载工具包到本地后上传到 Release（注意 GitHub 单文件 2GiB 上限，分卷需拆分） |
 
-工具包获取：登录 [华为开发者联盟下载中心 - Command Line Tools](https://developer.huawei.com/consumer/cn/download/command-line-tools-for-hmos)，选择 **Linux x64** 且与工程 SDK（6.1.1(24)）匹配的版本（6.1.1.300）。
+工具包获取：登录 [华为开发者联盟下载中心 - Command Line Tools](https://developer.huawei.com/consumer/cn/download/command-line-tools-for-hmos)，选择 **Linux x64** 且与工程 SDK 匹配的版本（26.0.0，API 26 Beta2）。
 
 签名 secrets：`SIGNING_KEY`（p12 base64）/ `SIGNING_CERT` / `SIGNING_PROFILE` / `KEYSTORE_PASSWORD` / `KEY_PASSWORD` / `KEY_ALIAS`
 
