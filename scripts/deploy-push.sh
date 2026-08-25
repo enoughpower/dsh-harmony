@@ -1,9 +1,16 @@
-#!/bin/bash
-# 同步推送服务到 ~/.dsh 运行副本（Desktop/TCC 限制：launchd 只能跑非 Desktop 路径）
-set -e
-SRC=/Users/dale/Desktop/workspace/dsh-harmony/tools/push-notify
-DST=$HOME/.dsh/push-notify
-cp "$SRC/push-notify.js" "$DST/"
-[ -f "$SRC/.env" ] && cp "$SRC/.env" "$DST/"
-[ -f "$DST/tokens.json" ] && cp "$DST/tokens.json" "$DST/tokens.json.bak"
-echo "部署完成: 重启服务(launchctl kickstart -k gui/$(id -u)/com.dsh.push-notify)"
+#!/usr/bin/env bash
+# deploy-push.sh —— 部署 push-notify 到 ~/.dsh/push-notify 并注册 launchd 常驻(本机)
+set -euo pipefail
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+DEST="$HOME/.dsh/push-notify"
+mkdir -p "$DEST"
+cp "$ROOT/tools/push-notify/push-notify.js" "$DEST/"
+cp "$ROOT/tools/push-notify/.env.example" "$DEST/.env.example"
+cp "$ROOT/scripts/run-push-notify.sh" "$DEST/run-push-notify.sh"
+chmod +x "$DEST/run-push-notify.sh"
+PLIST="$HOME/Library/LaunchAgents/com.dsh.push-notify.plist"
+sed "s|<string>~/.dsh/push-notify/run-push-notify.sh</string>|<string>"$DEST"/run-push-notify.sh</string>|" \
+  "$ROOT/scripts/com.dsh.push-notify.plist" > "$PLIST"
+launchctl unload "$PLIST" 2>/dev/null || true
+launchctl load "$PLIST"
+echo "deploy done: $DEST"

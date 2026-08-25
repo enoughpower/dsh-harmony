@@ -2,22 +2,13 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-  <key>Label</key>
-  <string>com.dsh.push-notify</string>
+  <key>Label</key><string>com.dsh.push-notify</string>
   <key>ProgramArguments</key>
-  <array>
-    <string>/bin/bash</string>
-    <string>/Users/dale/Desktop/workspace/dsh-harmony/scripts/run-push-notify.sh</string>
-  </array>
-  <key>RunAtLoad</key>
-  <true/>
-  <key>KeepAlive</key>
-  <true/>
-  <key>ProcessType</key>
-  <string>Background</string>
-  <key>StandardOutPath</key>
-  <string>/tmp/push-notify.service.log</string>
-  <key>StandardErrorPath</key>
-  <string>/tmp/push-notify.service.err.log</string>
+  <array><string>/bin/bash</string><string>~/.dsh/push-notify/run-push-notify.sh</string></array>
+  <key>RunAtLoad</key><true/>
+  <key>KeepAlive</key><true/>
+  <key>ProcessType</key><string>Background</string>
+  <key>StandardOutPath</key><string>/tmp/push-notify.service.log</string>
+  <key>StandardErrorPath</key><string>/tmp/push-notify.service.err.log</string>
 </dict>
 </plist>

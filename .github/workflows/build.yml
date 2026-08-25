@@ -55,14 +55,14 @@ jobs:
 
       - name: Install dependencies (本机 mac26 工具链, 零下载)
         run: |
-          export DEVECO_SDK_HOME=/Users/dale/.harmony/command-line-tools-mac26/sdk
-          export PATH="/Users/dale/.nvm/versions/node/v22.19.0/bin:/Users/dale/.harmony/command-line-tools-mac26/ohpm/bin:/Users/dale/.harmony/command-line-tools-mac26/hvigor/bin:$PATH"
+          export DEVECO_SDK_HOME=$HOME/.harmony/command-line-tools-mac26/sdk
+          export PATH="$HOME/.nvm/versions/node/v22.19.0/bin:$HOME/.harmony/command-line-tools-mac26/ohpm/bin:$HOME/.harmony/command-line-tools-mac26/hvigor/bin:$PATH"
           ohpm install --all
 
       - name: Build debug HAP
         env:
-          DEVECO_SDK_HOME: /Users/dale/.harmony/command-line-tools-mac26/sdk
+          DEVECO_SDK_HOME: $HOME/.harmony/command-line-tools-mac26/sdk
         run: |
-          export PATH="/Users/dale/.nvm/versions/node/v22.19.0/bin:/Users/dale/.harmony/command-line-tools-mac26/ohpm/bin:/Users/dale/.harmony/command-line-tools-mac26/hvigor/bin:$PATH"
+          export PATH="$HOME/.nvm/versions/node/v22.19.0/bin:$HOME/.harmony/command-line-tools-mac26/ohpm/bin:$HOME/.harmony/command-line-tools-mac26/hvigor/bin:$PATH"
           hvigorw --mode module -p module=entry@default -p buildMode=debug assembleHap --no-daemon
 

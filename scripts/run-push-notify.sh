@@ -1,7 +1,6 @@
 #!/bin/bash
-# DSH push-notify 守护启动器（launchd 调用）
-cd /Users/dale/Desktop/workspace/dsh-harmony/tools/push-notify
-set -a
-. ./.env
-set +a
-exec /Users/dale/.nvm/versions/node/v22.19.0/bin/node push-notify.js
+# run-push-notify.sh —— 启动 push-notify(自定位仓库路径,不依赖绝对路径)
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+cd "$ROOT/tools/push-notify"
+NODE="${NODE:-$(command -v node || echo "$HOME/.nvm/versions/node/v22.19.0/bin/node")}"
+exec "$NODE" push-notify.js
