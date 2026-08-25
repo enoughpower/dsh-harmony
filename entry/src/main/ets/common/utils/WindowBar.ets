@@ -26,17 +26,20 @@ export class WindowBar {
     }
   }
 
-  /** 全局沉浸式（统一入口）：全屏布局 + 透明状态栏/导航栏，内容色随深浅色。 */
-  static async immersive(context: common.Context): Promise<void> {
+  /** 全局沉浸式（统一入口）：全屏布局 + 透明状态栏/导航栏，内容色随深浅色。
+   *  dark 缺省 = 按系统主题；显式传入 = 跟随调用方判定（如 WebShell 网页内主题可能与系统不同）。 */
+  static async immersive(context: common.Context, dark?: boolean): Promise<void> {
     try {
-      const p = WindowBar.pageBackground(context);
+      const fg = dark === undefined
+        ? WindowBar.pageBackground(context).fg
+        : (dark ? '#FFFFFF' : '#000000');
       const win = await window.getLastWindow(context);
       await win.setWindowLayoutFullScreen(true);
       await win.setWindowSystemBarProperties({
         statusBarColor: '#00000000',
         navigationBarColor: '#00000000',
-        statusBarContentColor: p.fg,
-        navigationBarContentColor: p.fg
+        statusBarContentColor: fg,
+        navigationBarContentColor: fg
       });
     } catch (e) {
       // 忽略：窗口未就绪等

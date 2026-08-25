@@ -37,6 +37,9 @@ struct WebShell {
   /** 状态栏高度（沉浸式时进度条下移留白） */
   @State statusBarH: number = 0;
   @StorageLink('osThemeIsDark') @Watch('onThemeChange') osThemeIsDark: boolean = false;
+  /** 网页实际外观：-1 未知（回退系统主题）/ 0 浅色 / 1 深色（网页内可独立于系统切换） */
+  @State webDark: number = -1;
+  private themeTimer: number = -1;
   private controller: webview.WebviewController = new webview.WebviewController();
 
   /** 深浅色切换回调：刷新系统栏，与网页主题同步 */
@@ -44,20 +47,63 @@ struct WebShell {
     this.applyWebBar();
   }
 
-  /** WebShell 沉浸式（统一）：系统栏由 EntryAbility 全局设置，此处同步内容色并实测状态栏高（网页不挡状态栏） */
+  /** 状态栏底色条：优先网页实际外观（网页内可独立切深浅），未知时回退系统主题 */
+  private stripBg(): string {
+    if (this.webDark === 1) {
+      return '#151517';
+    }
+    if (this.webDark === 0) {
+      return '#FFFFFF';
+    }
+    return this.osThemeIsDark ? '#151517' : '#FFFFFF';
+  }
+
+  /** WebShell 沉浸式（统一）：内容色跟随网页实际主题（网页内可独立于系统切浅/深），并实测状态栏高（网页不挡状态栏） */
   private applyWebBar(): void {
     const ctx = this.getUIContext().getHostContext() as common.UIAbilityContext;
-    WindowBar.immersive(ctx).catch(() => {
+    const dark = this.webDark >= 0 ? this.webDark === 1 : this.osThemeIsDark;
+    WindowBar.immersive(ctx, dark).catch(() => {
     });
     WindowBar.statusBarHeight(ctx, (px: number) => this.getUIContext().px2vp(px)).then((h: number) => {
       this.statusBarH = h > 0 ? h : this.statusBarH;
     });
   }
 
+  /** 轮询网页 body 实际背景亮度 → 判定网页当前外观（不依赖网页主题实现方式；forceDarkAccess 已关，网页自主） */
+  private pollWebTheme(): void {
+    const js = "(function(){" +
+      "function bg(el){var c=getComputedStyle(el).backgroundColor;" +
+      "var m=c.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/);return m?m:null;}" +
+      "var m=bg(document.body)||bg(document.documentElement);" +
+      "if(!m||m[1]==='0'&&m[2]==='0'&&m[3]==='0'){return -1;}" +
+      "var lum=0.299*(+m[1])+0.587*(+m[2])+0.114*(+m[3]);" +
+      "return lum<100?1:0;" +
+      "})()";
+    try {
+      this.controller.runJavaScript(js).then((ret: string) => {
+        const v = parseInt(ret, 10);
+        if (v === 0 || v === 1) {
+          if (this.webDark !== v) {
+            this.webDark = v;
+            this.applyWebBar();
+          }
+        }
+      }).catch(() => {
+      });
+    } catch (e) {
+    }
+  }
+
   aboutToAppear(): void {
     // CDP 调试（webview-devtools 需要；正式版可移除）
     webview.WebviewController.setWebDebuggingAccess(true);
     this.applyWebBar();
+    // 网页外观轮询（网页内可独立切主题，需跟随刷新状态栏底色/图标色）
+    if (this.themeTimer < 0) {
+      this.themeTimer = setInterval(() => {
+        this.pollWebTheme();
+      }, 1200);
+    }
     const params = router.getParams() as Record<string, string>;
     const raw = params?.['url'] ?? '';
     const normalized = UrlUtils.normalize(raw);
@@ -71,9 +117,17 @@ struct WebShell {
     }
   }
 
+  aboutToDisappear(): void {
+    if (this.themeTimer >= 0) {
+      clearInterval(this.themeTimer);
+      this.themeTimer = -1;
+    }
+  }
+
   onPageShow(): void {
     this.applyWebBar();
     this.ensureDownloadUri();
+    this.pollWebTheme();
   }
 
   /** 物理返回键：优先 Web 内后退。 */
@@ -448,8 +502,8 @@ struct WebShell {
     }
     .width('100%')
     .height('100%')
-    // 状态栏底色随主题：浅色白 / 深色 #151517（CDP 实测网页 body 背景色），网页内容保持避让
-    .backgroundColor(this.osThemeIsDark ? '#151517' : '#FFFFFF')
+    // 状态栏底色条：跟随网页实际外观（浅色白 / 深色 #151517），网页内容保持避让
+    .backgroundColor(this.stripBg())
     .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.TOP, SafeAreaEdge.BOTTOM])
     .padding({ top: this.statusBarH })
   }
@@ -468,8 +522,10 @@ struct WebShell {
           } else {
             Web({ src: this.url, controller: this.controller })
               .javaScriptAccess(true)
+              // darkMode Auto：跟随系统（网页"跟随系统"模式时生效）；
+              // forceDarkAccess 关闭：网页内可独立切换浅/深外观，不被系统深色强制转深
               .darkMode(WebDarkMode.Auto)
-              .forceDarkAccess(true)
+              .forceDarkAccess(false)
               .domStorageAccess(true)
               .zoomAccess(false)
               .overScrollMode(OverScrollMode.NEVER)
@@ -485,6 +541,7 @@ struct WebShell {
               .onPageEnd(() => {
                 this.loading = false;
                 this.failed = false;
+                this.pollWebTheme();
               })
               .onTitleReceive((event: OnTitleReceiveEvent) => {
                 const t = event.title ?? '';
@@ -561,7 +618,7 @@ struct WebShell {
         }
         .layoutWeight(1)
         .width('100%')
-        .backgroundColor(this.osThemeIsDark ? '#151517' : '#FFFFFF')
+        .backgroundColor(this.stripBg())
       }
       .layoutWeight(1)
       .height('100%')
