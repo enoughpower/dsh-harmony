@@ -5,6 +5,7 @@ import { ConnectionStore } from '../common/store/ConnectionStore';
 import { CardSync } from '../common/store/CardSync';
 import { UrlUtils } from '../common/utils/UrlUtils';
 import { BackButton } from '../components/BackButton';
+import { WindowBar } from '../common/utils/WindowBar';
 
 /**
  * 连接历史页：按 IP 去重、时间倒序，列表左滑删除，点击直达连接。
@@ -13,6 +14,8 @@ import { BackButton } from '../components/BackButton';
 @Component
 struct HistoryPage {
   @State entries: ConnectionProfile[] = [];
+  /** 状态栏高度（沉浸式内容留白，不挡状态栏） */
+  @State statusBarH: number = 28;
   private store: ConnectionStore = new ConnectionStore();
 
   aboutToAppear(): void {
@@ -21,6 +24,11 @@ struct HistoryPage {
 
   onPageShow(): void {
     this.reload();
+    // 实测状态栏高度（沉浸式由 EntryAbility 全局设置）
+    const ctx = this.getUIContext().getHostContext() as common.UIAbilityContext;
+    WindowBar.statusBarHeight(ctx, (px: number) => this.getUIContext().px2vp(px)).then((h: number) => {
+      this.statusBarH = h > 0 ? h : this.statusBarH;
+    });
   }
 
   private reload(): void {
@@ -91,7 +99,7 @@ struct HistoryPage {
     .width('100%')
     .height('100%')
     .backgroundColor($r('app.color.page_background'))
-    .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.BOTTOM])
+    .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.TOP, SafeAreaEdge.BOTTOM])
   }
 
   @Builder
@@ -157,7 +165,7 @@ struct HistoryPage {
     }
     .width('100%')
     .height('100%')
-    .padding({ left: 20, right: 20, top: 16, bottom: 20 })
+    .padding({ left: 20, right: 20, top: this.statusBarH + 16, bottom: 20 })
     .backgroundColor($r('app.color.page_background'))
   }
 }

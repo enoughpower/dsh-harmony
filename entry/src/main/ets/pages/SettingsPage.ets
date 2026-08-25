@@ -12,6 +12,7 @@ import { LanDiscovery, DiscoveredService } from '../common/utils/LanDiscovery';
 import { ConnectionCard } from '../components/ConnectionCard';
 import { UrlUtils } from '../common/utils/UrlUtils';
 import { ConnectionProfile } from '../model/ConnectionProfile';
+import { WindowBar } from '../common/utils/WindowBar';
 
 const DOMAIN = 0x0000;
 const TAG = 'DSHHarmony';
@@ -28,6 +29,8 @@ struct SettingsPage {
   @State lanPin: string = AppPrefs.DEFAULT_LAN_PIN;
   @State scanning: boolean = false;
   @State discovered: DiscoveredService[] = [];
+  /** 状态栏高度（沉浸式内容留白，不挡状态栏） */
+  @State statusBarH: number = 28;
   private store: ConnectionStore = new ConnectionStore();
 
   aboutToAppear(): void {
@@ -35,6 +38,11 @@ struct SettingsPage {
     this.loadHistoryCount();
     this.loadAutoConnect();
     this.loadLanPin();
+    // 实测状态栏高度（沉浸式由 EntryAbility 全局设置）
+    const ctx = this.getUIContext().getHostContext() as common.UIAbilityContext;
+    WindowBar.statusBarHeight(ctx, (px: number) => this.getUIContext().px2vp(px)).then((h: number) => {
+      this.statusBarH = h > 0 ? h : this.statusBarH;
+    });
   }
 
   private loadAutoConnect(): void {
@@ -200,7 +208,7 @@ struct SettingsPage {
     .width('100%')
     .height('100%')
     .backgroundColor($r('app.color.page_background'))
-    .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.BOTTOM])
+    .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.TOP, SafeAreaEdge.BOTTOM])
   }
 
   @Builder
@@ -348,7 +356,7 @@ struct SettingsPage {
     }
     .width('100%')
     .height('100%')
-    .padding({ left: 20, right: 20, top: 16, bottom: 20 })
+    .padding({ left: 20, right: 20, top: this.statusBarH + 16, bottom: 20 })
     .backgroundColor($r('app.color.page_background'))
     .alignItems(HorizontalAlign.Center)
   }

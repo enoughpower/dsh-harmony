@@ -3,7 +3,6 @@
     "pages/Index",
     "pages/WebShell",
     "pages/SettingsPage",
-    "pages/HistoryPage",
-    "pages/ScanPage"
+    "pages/HistoryPage"
   ]
 }

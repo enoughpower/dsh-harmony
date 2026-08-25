@@ -57,3 +57,59 @@ HarmonyOS 应用**必须签名才能安装到真机**。本工程为自用场景
 - **时间不一致**：本地系统时间必须与北京时间同步，否则签名校验失败
 - **包名冲突**：自动签名关联 AGC 应用时若包名已被其他团队占用会报错——本工程用 `com.dsh.lite`，自用无冲突风险
 - **升级换签名**：换签名后需先卸载旧版再安装（自用场景可接受）
+
+
+## 两套打包配置(装机 / 上架)
+
+工程 `build-profile.json5` 用**两个 product** 承载两套签名(该文件被 git 标记
+skip-worktree,永不入库):
+
+| product | signingConfig | 材料 | 用途 | hdc 侧载 |
+| --- | --- | --- | --- | --- |
+| `default` | `default` | DevEco 自动签名 `~/.ohos/config/default_dsh-harmony_*.p12/.cer/.p7b` | 装机/日常调试 | ✅ 可安装到手机 |
+| `release` | `release` | 发布证书 `~/.ohos/config/dsh-release.p12 + release.cer + release-profile.p7b` | 平台/应用市场上架 | ❌ 系统拒绝(9568322) |
+
+**重要:release 签名包不允许 hdc 侧载** —— HarmonyOS 硬性安全策略,发布证书产物只能走平台
+审核分发。所以"装到手机上看"必须选 `default` product。
+
+**切换方式**:
+- **DevEco**: 构建/运行配置中选择 product(`default` = 装机, `release` = 上架);
+  或 `File > Project Structure > Signing Configs` 查看/修改各 product 的签名
+- **CLI**: `./scripts/switch-signing.sh build default debug`(装机) /
+  `./scripts/switch-signing.sh build release release`(上架,注意产物的 .hap 不可 hdc 侧载)
+
+**debug(自动签名)材料缺失时的处理**: debug 的 `.p7b` profile 只能由 DevEco 通过华为账号
+在线生成(profile 绑定手机 UDID),离线 CLI 无法凭空生成。若 `~/.ohos/config` 下缺 debug profile:
+1. DevEco 打开工程 → `File > Project Structure > Signing Configs`
+2. 选 `Automatically generate signature`(需登录华为账号, 手机已连接)
+3. 保存后 DevEco 会把 debug 的 `storePassword/keyPassword/profile` 补全进 build-profile.json5
+4. 再 `./scripts/switch-signing.sh build default debug` 构建即得可侧载包
+
+## 常见问题
+
+- **时间不一致**：本地系统时间必须与北京时间同步，否则签名校验失败
+- **包名冲突**：自动签名关联 AGC 应用时若包名已被其他团队占用会报错——本工程用 `com.dsh.lite`，自用无冲突风险
+- **升级换签名**：换签名后需先卸载旧版再安装（自用场景可接受）
+
+
+## 两套签名配置(debug 装机 / release 上架)
+
+工程 `build-profile.json5` 的 `signingConfigs` 里维护**两套**签名(该文件被 git 标记
+skip-worktree,永不入库):
+
+| 名称 | 材料 | 用途 | hdc 侧载 |
+| --- | --- | --- | --- |
+| `debug` | DevEco 自动签名 `~/.ohos/config/default_dsh-harmony_*.p12/.cer/.p7b` | 装机/日常调试 | ✅ 可安装到手机 |
+| `release` | 发布证书 `~/.ohos/config/dsh-release.p12 + release.cer + release-profile.p7b` | 平台/应用市场上架 | ❌ 系统拒绝(9568322) |
+
+**重要:release 签名包不允许 hdc 侧载** —— HarmonyOS 硬性安全策略,发布证书产物只能走平台
+审核分发。所以"装到手机上看"必须用 `debug` 签名构建。
+
+切换方式: `./scripts/switch-signing.sh debug|release`(只切 product 的 signingConfig 引用)。
+
+**debug 材料缺失时的处理**: debug 的 `.p7b` profile 只能由 DevEco 通过华为账号在线生成
+(profile 绑定手机 UDID),离线 CLI 无法凭空生成。若 `~/.ohos/config` 下缺 debug profile:
+1. DevEco 打开工程 → `File > Project Structure > Signing Configs`
+2. 选 `Automatically generate signature`(需登录华为账号, 手机已连接)
+3. 保存后 DevEco 会把 debug 的 `storePassword/keyPassword/profile` 补全进 build-profile.json5
+4. 再 `./scripts/switch-signing.sh debug` 构建即得可侧载包

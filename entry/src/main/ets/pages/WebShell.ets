@@ -1,5 +1,5 @@
 import { webview } from '@kit.ArkWeb';
-import { router, promptAction, uiMaterial } from '@kit.ArkUI';
+import { router, promptAction } from '@kit.ArkUI';
 import { picker, fileUri, fileIo } from '@kit.CoreFileKit';
 import { photoAccessHelper } from '@kit.MediaLibraryKit';
 import { image } from '@kit.ImageKit';
@@ -34,6 +34,8 @@ struct WebShell {
   @State failed: boolean = false;
   @State failText: string = '';
   @State wide: boolean = false;
+  /** 状态栏高度（沉浸式时进度条下移留白） */
+  @State statusBarH: number = 0;
   @StorageLink('osThemeIsDark') @Watch('onThemeChange') osThemeIsDark: boolean = false;
   private controller: webview.WebviewController = new webview.WebviewController();
 
@@ -42,11 +44,14 @@ struct WebShell {
     this.applyWebBar();
   }
 
-  /** WebShell 系统栏跟随深浅色（网页随 darkMode Auto 变深时，系统栏同步深底白字） */
+  /** WebShell 沉浸式（统一）：系统栏由 EntryAbility 全局设置，此处同步内容色并实测状态栏高（网页不挡状态栏） */
   private applyWebBar(): void {
     const ctx = this.getUIContext().getHostContext() as common.UIAbilityContext;
-    const p = WindowBar.pageBackground(ctx);
-    WindowBar.set(ctx, p.bg, p.fg);
+    WindowBar.immersive(ctx).catch(() => {
+    });
+    WindowBar.statusBarHeight(ctx, (px: number) => this.getUIContext().px2vp(px)).then((h: number) => {
+      this.statusBarH = h > 0 ? h : this.statusBarH;
+    });
   }
 
   aboutToAppear(): void {
@@ -437,13 +442,16 @@ struct WebShell {
   }
 
   build() {
-    // Web 占满方案：顶部让出状态栏（内容默认避让），底部扩展至屏幕底（无背景色条）
+    // Web 占满方案：网页避让状态栏；状态栏底色随主题（浅色白/深色黑），底部扩展至屏幕底
     Column() {
       this.Main()
     }
     .width('100%')
     .height('100%')
-    .backgroundColor($r('app.color.page_background'))
+    // 状态栏底色随主题：浅色白 / 深色 #151517（CDP 实测网页 body 背景色），网页内容保持避让
+    .backgroundColor(this.osThemeIsDark ? '#151517' : '#FFFFFF')
+    .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.TOP, SafeAreaEdge.BOTTOM])
+    .padding({ top: this.statusBarH })
   }
 
   @Builder
@@ -545,11 +553,7 @@ struct WebShell {
           .width(44)
           .height(44)
           .borderRadius(22)
-          .backgroundColor(Color.Transparent)
-          .systemMaterial(new uiMaterial.ImmersiveMaterial({
-            style: uiMaterial.ImmersiveStyle.ULTRA_THIN,
-            interactive: false
-          }))
+          .backgroundColor('#26000000')
           .position({ x: '80%', y: '86%' })
           .onClick(() => {
             this.pickAndInjectImage();
@@ -557,7 +561,7 @@ struct WebShell {
         }
         .layoutWeight(1)
         .width('100%')
-        .backgroundColor(Color.White)
+        .backgroundColor(this.osThemeIsDark ? '#151517' : '#FFFFFF')
       }
       .layoutWeight(1)
       .height('100%')

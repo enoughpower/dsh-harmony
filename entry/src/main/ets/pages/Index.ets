@@ -1,5 +1,6 @@
 import { abilityAccessCtrl, common, Permissions } from '@kit.AbilityKit';
-import { router } from '@kit.ArkUI';
+import { router, promptAction } from '@kit.ArkUI';
+import { scanBarcode, scanCore } from '@kit.ScanKit';
 import { fileIo } from '@kit.CoreFileKit';
 import { util } from '@kit.ArkTS';
 import { hilog } from '@kit.PerformanceAnalysisKit';
@@ -33,6 +34,8 @@ struct Index {
   @State sessionError: string = '';
   @State pushOnline: boolean = false;
   @State pushChecking: boolean = false;
+  /** 状态栏高度（沉浸式时内容顶部留白），onPageShow 实测校正 */
+  @State statusBarH: number = 28;
   private pushTimer: number = -1;
   private sessionTimer: number = -1;
   private store: ConnectionStore = new ConnectionStore();
@@ -63,10 +66,15 @@ struct Index {
 
   onPageShow(): void {
     this.reloadHistory();
-    // 恢复系统栏颜色（WebShell 会把系统栏设为网页色，回到首页需还原）
+    // 沉浸式系统栏兜底：幂等重设（冷启动/时序问题/去其他页面后回首页都保证正确），并实测状态栏高度
     const barCtx = this.getUIContext().getHostContext() as common.UIAbilityContext;
-    const page = WindowBar.pageBackground(barCtx);
-    WindowBar.set(barCtx, page.bg, page.fg);
+    WindowBar.immersive(barCtx).catch(() => {
+    });
+    // 同步 osThemeIsDark（page-show 时 ResourceManager 必已可靠，供 WebShell 等消费）
+    AppStorage.setOrCreate('osThemeIsDark', WindowBar.isDark(barCtx));
+    WindowBar.statusBarHeight(barCtx, (px: number) => this.getUIContext().px2vp(px)).then((h: number) => {
+      this.statusBarH = h > 0 ? h : this.statusBarH;
+    });
     // 打开首页时同步服务卡片状态（在线探测）
     const synCtx = this.getUIContext().getHostContext() as common.UIAbilityContext;
     CardSync.syncAll(synCtx).catch((e: BusinessError) => {
@@ -272,7 +280,7 @@ struct Index {
     });
   }
 
-  /** 扫码：自绘扫码页（全黑沉浸）→ 结果经 pendingDshUrl 回流。 */
+  /** 扫码：直接起系统扫码页（scanBarcode），识别后直接打开，不再经过 ScanPage。 */
   private async scanAndOpen(): Promise<void> {
     if (this.busy) {
       return;
@@ -283,7 +291,20 @@ struct Index {
         hilog.warn(DOMAIN, TAG, 'camera permission denied');
         return;
       }
-      router.pushUrl({ url: 'pages/ScanPage' });
+      const ctx = this.getUIContext().getHostContext() as common.UIAbilityContext;
+      const options: scanBarcode.ScanOptions = {
+        'scanTypes': [scanCore.ScanType.ALL]
+      };
+      const result = await scanBarcode.startScanForResult(ctx, options);
+      const raw = result.originalValue ?? '';
+      hilog.info(DOMAIN, TAG, 'scan ok: %{public}s', raw);
+      if (raw.length > 0) {
+        this.openUrl(raw);
+      } else {
+        promptAction.showToast({ message: '未识别到内容' });
+      }
+    } catch (e) {
+      hilog.warn(DOMAIN, TAG, 'scan cancelled/failed: %{public}s', (e as BusinessError).message);
     } finally {
       this.busy = false;
     }
@@ -326,9 +347,9 @@ struct Index {
           .fontSize(22)
           .fontColor([$r('app.color.text_primary')])
       }
-      .width(36)
-      .height(36)
-      .borderRadius(18)
+      .width(40)
+      .height(40)
+      .borderRadius(20)
       .backgroundColor($r('app.color.button_surface'))
       .stateEffect(false)
       .onClick(() => {
@@ -466,7 +487,7 @@ struct Index {
     .width('100%')
     .height('100%')
     .backgroundColor($r('app.color.page_background'))
-    .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.BOTTOM])
+    .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.TOP, SafeAreaEdge.BOTTOM])
   }
 
   @Builder
@@ -496,7 +517,7 @@ struct Index {
     }
     .width('100%')
     .height('100%')
-    .padding({ left: 20, right: 20, top: 16, bottom: 20 })
+    .padding({ left: 20, right: 20, top: this.statusBarH + 16, bottom: 20 })
     .backgroundColor($r('app.color.page_background'))
     .alignItems(HorizontalAlign.Center)
   }

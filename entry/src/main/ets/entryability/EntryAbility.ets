@@ -1,15 +1,15 @@
-import { AbilityConstant, UIAbility, Want, Configuration, ConfigurationConstant } from '@kit.AbilityKit';
+import { AbilityConstant, UIAbility, Want, Configuration } from '@kit.AbilityKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { window } from '@kit.ArkUI';
 import { PushToken } from '../common/store/PushToken';
+import { WindowBar } from '../common/utils/WindowBar';
 
 const DOMAIN = 0x0000;
 const TAG = 'DSHHarmony';
 
 /**
  * 主 Ability。
- * - 系统栏（状态栏/导航栏）颜色对齐页面背景资源色：浅色 #F7F8FA / 深色 #121417（实色，非透明）
- *   ——避免安全区与页面背景色不一致；不启用全屏（内容保持自动避让，防重叠/黑边）
+ * - 全局沉浸式：全屏布局 + 透明状态栏/导航栏（所有页面统一，内容自行让出状态栏）
  * - 服务卡片点击：解析 want.parameters.dshUrl → AppStorage.pendingDshUrl → Index 消费跳转
  */
 export default class EntryAbility extends UIAbility {
@@ -39,6 +39,8 @@ export default class EntryAbility extends UIAbility {
           err.code, err.message);
         return;
       }
+      // 冷启动时序兜底：内容挂载后再补一次系统栏（首帧前 config 可能未解析）
+      this.applySystemBarStyle();
       hilog.info(DOMAIN, TAG, 'pages/Index loaded.');
     });
   }
@@ -46,8 +48,8 @@ export default class EntryAbility extends UIAbility {
   onConfigurationUpdate(newConfig: Configuration): void {
     hilog.info(DOMAIN, TAG, 'onConfigurationUpdate: colorMode=%{public}d', newConfig.colorMode ?? -1);
     this.applySystemBarStyle();
-    // 深浅色同步给 WebShell（Web.darkMode Auto + forceDarkAccess 生效）
-    const isDark = newConfig.colorMode === ConfigurationConstant.ColorMode.COLOR_MODE_DARK;
+    // 深浅色同步给 WebShell（ResourceManager 解析,与系统栏一致）
+    const isDark = WindowBar.isDark(this.context);
     AppStorage.setOrCreate('osThemeIsDark', isDark);
   }
 
@@ -76,8 +78,8 @@ export default class EntryAbility extends UIAbility {
   }
 
   /**
-   * 系统栏颜色（确定性硬编码，不依赖资源解析时序）：
-   * 浅色模式：背景 #F7F8FA + 内容纯黑；深色模式：背景 #121417 + 内容纯白。
+   * 全局沉浸式（所有页面统一）：全屏布局 + 透明状态栏/导航栏，
+   * 内容色随深浅色（浅色纯黑 / 深色纯白）；页面内容自行让出状态栏（不挡）。
    */
   private applySystemBarStyle(): void {
     if (this.winStage === null) {
@@ -85,10 +87,14 @@ export default class EntryAbility extends UIAbility {
     }
     try {
       const win = this.winStage.getMainWindowSync();
-      const dark = this.context.config.colorMode === ConfigurationConstant.ColorMode.COLOR_MODE_DARK;
+      win.setWindowLayoutFullScreen(true);
+      // ResourceManager 解析主题色(跟随系统),不依赖 config.colorMode(冷启动可能 NOT_SET)
+      const dark = WindowBar.isDark(this.context);
+      AppStorage.setOrCreate('osThemeIsDark', dark);
+      hilog.info(DOMAIN, TAG, 'applySystemBar dark=%{public}s', String(dark));
       win.setWindowSystemBarProperties({
-        statusBarColor: dark ? '#121417' : '#F7F8FA',
-        navigationBarColor: dark ? '#121417' : '#F7F8FA',
+        statusBarColor: '#00000000',
+        navigationBarColor: '#00000000',
         statusBarContentColor: dark ? '#FFFFFF' : '#000000',
         navigationBarContentColor: dark ? '#FFFFFF' : '#000000'
       });

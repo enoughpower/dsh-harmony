@@ -2,6 +2,10 @@
   "color": [
     {
       "name": "start_window_background",
+      "value": "#121417"
+    },
+    {
+      "name": "immersive_content",
       "value": "#FFFFFF"
     },
     {
