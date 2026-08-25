@@ -21,6 +21,9 @@ keystore/
 # ---- 本地技能沉淀：开发经验/编码规范/Review 规范，不对外、不推远程 ----
 .agents/
 
+# ---- 本地工具状态 ----
+/.local/
+
 # ---- 系统/编辑器 ----
 .DS_Store
 Thumbs.db
@@ -38,6 +41,9 @@ tools/push-notify/.env
 tools/push-notify/tokens.json
 tools/push-notify/tokens.backup.json
 **/rawfile/agconnect-services.json
+
+# ---- 软著材料(本地) ----
+/copyright/
 
 # ---- 备份文件 / 开发产物 ----
 *.bak
