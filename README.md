@@ -15,7 +15,8 @@ DeepSeek Harness 的 **HarmonyOS 原生客户端**，与 [dsh-pocket](https://gi
 - 📥 **导出自动保存**：会话日志导出自动落到手机「下载」目录（零弹窗，`下载/com.dsh.lite/`）
 - ⚡ **最新会话速览**：首页卡片与桌面小组件显示最新会话（标题/进行中/轮次/步骤/相对时间，标题自动换行，点击刷新）
 - 🖼 **相册图片注入输入框**：右下悬浮光感按钮 → 相册选图 → 自动转 JPEG 注入 DSH 输入框（任意相册格式，直接带图对话）
-- 🔔 **Push Kit 推送（开发中）**：手机端 Token 获取与电脑端推送服务已就绪（`tools/push-notify/`），待 AGC 推送开通后实现后台/强杀也能收到任务进度通知（方案见 `docs/push-plan.md`）
+- 🔔 **Push Kit 推送（已打通）**：AGC 消息类别权益（WORK）+ 服务账号密钥 → V3 场景化 API + PS256 JWT，三场景自动推送（任务完成 / 长时间无响应 / 需要信息），锁屏可达；新装首启弹通知权限授权，连接后自动上报设备 token（`tools/push-notify/`）
+- 🎨 **全局沉浸式状态栏**：所有页面全屏沉浸、内容避让状态栏；启动窗口 / 冷启动深色模式正确；WebShell 状态栏跟随网页实际主题（浅/深色）
 
 > 🔑 **AGC 依赖配置（不入库，构建前需放置）**：从 AGC 下载的 `agconnect-services.json` 放入 `entry/src/main/resources/rawfile/`；AGC 凭证（AppID/密钥）写入 `tools/push-notify/.env`（真实值不提交，参考 `.env.example`）；发布签名材料放 `certs/`（已 gitignore，含私钥严禁提交）
 - 📇 **服务卡片**：桌面小组件显示连接状态、最近使用时间与最新会话，点击直达 DSH

@@ -1,5 +1,26 @@
 # Changelog
 
+## 2026-08-25
+
+### feat
+- **Push Kit 推送全链路打通**（华为 AGC）：
+  - 消息类别权益「工作事项提醒」审核通过 → 发送 category=WORK（营销类必须 MARKETING，未获批不可冒充服务/通讯类）
+  - HarmonyOS NEXT 使用 **V3 场景化 API**（V1/V2 仅支持 3.x/4.x）：`POST /v3/<projectId>/messages:send` + `push-type: 0`，鉴权改为**服务账号密钥 → PS256 JWT**（API Console 下载）
+  - 调试证书闭环：AGC 只接受 ECDSA CSR（keytool EC prime256v1），新证书配私钥后重签装机，token 重新有效
+  - push-notify 华为通道重写（V3+JWT），launchd 常驻服务 SENDER=huawei；重装/首连即上报 token（Index.openUrl）
+  - 新装首启请求通知权限（notificationManager.requestEnableNotification）
+  - 修复 JWT PS256 padding 常量（RSA_PKCS1 → RSA_PKCS1_PSS）导致 80200001
+- **全局沉浸式状态栏**：所有页面 expandSafeArea + 状态栏留白；深色判定改用 ResourceManager（冷启动 config.colorMode 不可靠）；启动窗口背景 dark 变体修复冷启动白屏；WebShell 关 forceDarkAccess + 轮询网页 body 亮度跟随网页主题
+- **扫码统一系统**：删除 ScanPage，首页扫码直接 scanBarcode.startScanForResult（修复 6.1 uiMaterial 崩溃）
+
+### refactor
+- 签名体系：新增 product `local`（unsigned 构建）+ `scripts/sign-local.mjs` 手动签名流水线（绕开 hvigor 加密密码 material 体系）；`scripts/encrypt-pwd.mjs` 生成 material 密文，default product 恢复 DevEco 直接构建
+- 删除 test 测试推送通道，仅保留 huawei
+
+### fix
+- 冷启动深色模式状态栏/启动窗口白屏（material N/A 资源 + 时序兜底）
+- WebShell 网页内切换浅/深色被 forceDarkAccess 覆盖
+
 ## 2026-08-24
 
 ### feat

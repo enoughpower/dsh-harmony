@@ -19,8 +19,7 @@ import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 const APP_ID = process.env.PUSH_APP_ID || '';
 const APP_SECRET = process.env.PUSH_APP_SECRET || '';
 // 临时异常测试渠道（SENDER=test）；SENDER=huawei 用华为 AGC 自有推送
-const SENDER = process.env.SENDER || 'test';
-const TEST_NICK = process.env.TEST_NICK || '';
+const SENDER = 'huawei';
 const DSH_BASE = (process.env.DSH_BASE || 'http://127.0.0.1:3081').replace(/\/+$/, '');
 const DSH_PIN = process.env.DSH_PIN || '11111111';
 
@@ -96,20 +95,6 @@ async function huaweiSend(title, body) {
   console.log('[push] send ->', res.status, JSON.stringify(data).slice(0, 200));
 }
 
-// ---- 临时异常测试渠道（SENDER=test） ----
-async function testSend(title, body) {
-  if (!TEST_NICK) { console.log('[push] 测试渠道昵称未配置，跳过'); return; }
-  console.log('[push] send [' + String(title).slice(0, 24) + '] ' + String(body).slice(0, 40).replace(/\s+/g, ' '));
-  const params = { title: String(title).slice(0, 80), msg: String(body).slice(0, 500) };
-  const res = await fetch('https://api.chuckfang.com/' + TEST_NICK, {
-    method: 'POST',
-    headers: { 'content-type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams(params),
-  });
-  const data = await res.json();
-  console.log('[push] test send ->', JSON.stringify(data).slice(0, 160));
-}
-
 /** 发送节流队列：串行且 ≥3.1s 间隔（测试渠道限流 3 秒 1 条） */
 const sendQueue = [];
 let sending = false;
@@ -121,7 +106,7 @@ function drainQueue() {
   if (sending || sendQueue.length === 0) return;
   const item = sendQueue.shift();
   sending = true;
-  const doSend = SENDER === 'huawei' ? huaweiSend : testSend;
+  const doSend = huaweiSend;
   doSend(item.title, item.body).catch(() => {}).finally(() => {
     sending = false;
     setTimeout(drainQueue, 3100);
