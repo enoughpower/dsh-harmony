@@ -1,1 +1,0 @@
-/Users/dale/Desktop/workspace/dsh-harmony/scripts/sign-local.mjs

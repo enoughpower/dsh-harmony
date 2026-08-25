@@ -36,6 +36,7 @@ certs/
 *.pass
 tools/push-notify/.env
 tools/push-notify/tokens.json
+tools/push-notify/tokens.backup.json
 **/rawfile/agconnect-services.json
 
 # ---- 备份文件 / 开发产物 ----
