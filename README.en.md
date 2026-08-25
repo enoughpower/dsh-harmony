@@ -44,7 +44,7 @@ See the [dsh-pocket README](https://github.com/shaobeichen/dsh-pocket) for plugi
 | Item | Requirement |
 | --- | --- |
 | OS | HarmonyOS 7.0 (exact API version per your phone's About screen) |
-| Dev | DevEco Studio 6.1 + HarmonyOS SDK 26.0.0 Beta2 (hvigor / ohpm / hdc) |
+| Dev | DevEco Studio 26.0.0 Beta2 (hvigor / ohpm / hdc / HarmonyOS SDK 26) |
 | Device | A HarmonyOS phone / foldable / tablet with USB debugging enabled |
 
 > SDK config: `compileSdkVersion / targetSdkVersion = 26.0.0(26)` (SDK 26.0.0 Beta2 / API 26), `compatibleSdkVersion = 6.0.0(20)`.
