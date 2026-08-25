@@ -15,6 +15,7 @@ import { AppPrefs } from '../common/store/AppPrefs';
 import { WindowBar } from '../common/utils/WindowBar';
 import { PocketApi, LatestSessionInfo, SessionQueryResult } from '../common/utils/PocketApi';
 import { http } from '@kit.NetworkKit';
+import { notificationManager } from '@kit.NotificationKit';
 
 const DOMAIN = 0x0000;
 const TAG = 'DSHHarmony';
@@ -64,7 +65,31 @@ struct Index {
     });
   }
 
+  /** 新装首启:请求通知权限(推送通知展示前提;重复调用无弹窗副作用) */
+  private notifyRequested: boolean = false;
+
+  private async ensureNotifyPermission(): Promise<void> {
+    if (this.notifyRequested) {
+      return;
+    }
+    this.notifyRequested = true;
+    try {
+      const enabled = await notificationManager.isNotificationEnabled();
+      if (enabled) {
+        hilog.info(DOMAIN, TAG, 'notification already enabled');
+        return;
+      }
+      const ctx = this.getUIContext().getHostContext() as common.UIAbilityContext;
+      await notificationManager.requestEnableNotification(ctx);
+      hilog.info(DOMAIN, TAG, 'notification permission requested');
+    } catch (e) {
+      hilog.warn(DOMAIN, TAG, 'request notification permission failed: %{public}s', (e as Error).message);
+    }
+  }
+
   onPageShow(): void {
+    // 新装首启请求通知权限(推送链路前置)
+    this.ensureNotifyPermission();
     this.reloadHistory();
     // 沉浸式系统栏兜底：幂等重设（冷启动/时序问题/去其他页面后回首页都保证正确），并实测状态栏高度
     const barCtx = this.getUIContext().getHostContext() as common.UIAbilityContext;
