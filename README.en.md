@@ -109,7 +109,7 @@ Toolchain paths can be overridden via environment variables (`DEVECO_HOME` / `DE
 | Huawei download-center direct link | paste in workflow_dispatch inputs, or set variable `CLT_URL` / `CLT_SHA256` |
 | Local download | download package locally then upload to Release (GitHub 2GiB single-file cap; split if larger) |
 
-Get the package from [Huawei Developer download center - Command Line Tools](https://developer.huawei.com/consumer/cn/download/command-line-tools-for-hmos) — choose **Linux x64** matching the project SDK (6.1.1(24)), version 6.1.1.300.
+Get the package from [Huawei Developer download center - Command Line Tools](https://developer.huawei.com/consumer/cn/download/command-line-tools-for-hmos) — choose **Linux x64** matching the project SDK (26.0.0 / API 26 Beta2).
 
 Signing secrets: `SIGNING_KEY` (p12 base64) / `SIGNING_CERT` / `SIGNING_PROFILE` / `KEYSTORE_PASSWORD` / `KEY_PASSWORD` / `KEY_ALIAS`
 
