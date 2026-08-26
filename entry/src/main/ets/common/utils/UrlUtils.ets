@@ -55,6 +55,36 @@ export class UrlUtils {
     return s.split(':')[0].split('/')[0].split('?')[0];
   }
 
+  /** 主机是否 IP 形态（IPv4 / 带括号 IPv6 / localhost）。用于首页区分"内网 IP 直连"与"公网隧道"。 */
+  static isIpHost(raw: string): boolean {
+    const s = (raw ?? '').replace(UrlUtils.HTTP_RE, '');
+    if (s.length === 0) {
+      return false;
+    }
+    let host = s.split('/')[0];
+    if (host.startsWith('[')) {
+      // 带括号 IPv6（如 [::1]:3081）
+      return host.indexOf(']') >= 0;
+    }
+    host = host.split(':')[0];
+    if (host === 'localhost') {
+      return true;
+    }
+    if (host.length === 0) {
+      return false;
+    }
+    return /^(\d{1,3}\.){3}\d{1,3}$/.test(host);
+  }
+
+  /** 主机是否 Cloudflare 公网隧道（子域名每次随机变化，但域后缀 trycloudflare.com 稳定，用正则匹配后缀）。 */
+  static isTunnelHost(raw: string): boolean {
+    const host = UrlUtils.hostOf(raw);
+    if (host.length === 0) {
+      return false;
+    }
+    return /(^|\.)trycloudflare\.com$/i.test(host);
+  }
+
   /** 展示用摘要：去掉协议前缀，超长截断 */
   static display(raw: string, maxLen: number = 40): string {
     const s = (raw ?? '').replace(UrlUtils.HTTP_RE, '');

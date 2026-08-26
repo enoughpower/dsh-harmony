@@ -73,20 +73,14 @@ export class PushToken {
 
   /** 上报 token：找最近连接，POST /api/push.token 给电脑端推送器 */
   private static async report(context: common.Context, token: string): Promise<void> {
-    const list = await new ConnectionStore().loadAll(context);
+    const store = new ConnectionStore();
+    const list = await store.loadAll(context);
     if (list.length === 0) {
       return;
     }
-    const base = list[0].url.replace(/\/+$/, '');
-    // 上报给电脑端推送服务（独立进程 :3082；从连接地址取主机、换端口）
-    let host: string = '';
-    const protoEnd = base.indexOf('://');
-    if (protoEnd >= 0) {
-      let rest = base.substring(protoEnd + 3);
-      const colon = rest.indexOf(':');
-      host = colon >= 0 ? rest.substring(0, colon) : rest;
-    }
-    const reportBase = host.length > 0 ? 'http://' + host + ':3082' : base;
+    // 上报给电脑端推送服务（:3082；用内网 IP 主机；隧道域名/端口不在公网暴露，无法回连 3082）
+    const host = store.pushHostOf(list);
+    const reportBase = host.length > 0 ? 'http://' + host + ':3082' : list[0].url.replace(/\/+$/, '');
     const rpc: PushTokenRpc = {
       'type': 'client-request',
       'rpcId': 'push-token-' + Date.now(),

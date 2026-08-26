@@ -57,6 +57,30 @@ export default function urlUtilsTest() {
       expect(UrlUtils.isHttpUrl('')).assertFalse();
     });
 
+    it('isIpHost_classification', 0, () => {
+      // IPv4 直连
+      expect(UrlUtils.isIpHost('http://192.168.1.5:3081')).assertTrue();
+      expect(UrlUtils.isIpHost('192.168.1.5')).assertTrue();
+      // 非 IP 域名/隧道
+      expect(UrlUtils.isIpHost('https://abc.trycloudflare.com')).assertFalse();
+      expect(UrlUtils.isIpHost('http://my-dsh.local:3081')).assertFalse();
+      // localhost
+      expect(UrlUtils.isIpHost('http://localhost:3081')).assertTrue();
+      // 空串
+      expect(UrlUtils.isIpHost('')).assertFalse();
+    });
+
+    it('isTunnelHost_classification', 0, () => {
+      // 子域名随机变化，但后缀稳定：用正则匹配后缀
+      expect(UrlUtils.isTunnelHost('https://abc.trycloudflare.com')).assertTrue();
+      expect(UrlUtils.isTunnelHost('https://bedford-here-cayman-parker.trycloudflare.com')).assertTrue();
+      // 非隧道
+      expect(UrlUtils.isTunnelHost('http://192.168.1.5:3081')).assertFalse();
+      expect(UrlUtils.isTunnelHost('http://my-dsh.local:3081')).assertFalse();
+      expect(UrlUtils.isTunnelHost('http://example.com')).assertFalse();
+      expect(UrlUtils.isTunnelHost('')).assertFalse();
+    });
+
     it('display_truncates_and_strips_scheme', 0, () => {
       const long = 'http://' + 'a'.repeat(100) + '.example.com';
       const d = UrlUtils.display(long, 20);

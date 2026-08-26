@@ -75,6 +75,24 @@ export class ConnectionStore {
     return out;
   }
 
+  /** 推导推送服务主机：优先最近使用的"内网 IP"直连，其次最近使用连接的主机；无则空串。 */
+  pushHostOf(list: ConnectionProfile[]): string {
+    let fallback = '';
+    for (const p of list) {
+      const host = UrlUtils.hostOf(p.url);
+      if (host.length === 0) {
+        continue;
+      }
+      if (fallback.length === 0) {
+        fallback = host;
+      }
+      if (UrlUtils.isIpHost(p.url)) {
+        return host;
+      }
+    }
+    return fallback;
+  }
+
   /** 新增/更新一条（同 URL 覆盖并刷新 lastUsedAt），超上限裁剪最旧的。 */
   async upsert(context: common.Context, profile: ConnectionProfile): Promise<void> {
     const list = await this.loadAll(context);

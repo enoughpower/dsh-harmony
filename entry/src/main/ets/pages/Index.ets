@@ -29,6 +29,8 @@ const TAG = 'DSHHarmony';
 @Component
 struct Index {
   @State connections: ConnectionProfile[] = [];
+  @State lanConn: ConnectionProfile | null = null;
+  @State tunnelConn: ConnectionProfile | null = null;
   @State busy: boolean = false;
   @State autoConnectEnabled: boolean = true;
   @State latestSession: LatestSessionInfo | null = null;
@@ -160,9 +162,31 @@ struct Index {
     const ctx = this.getUIContext().getHostContext() as common.UIAbilityContext;
     this.store.loadAll(ctx).then((list: ConnectionProfile[]) => {
       this.connections = list;
+      this.lanConn = this.pickLanConn(list);
+      this.tunnelConn = this.pickTunnelConn(list);
     }).catch((e: BusinessError) => {
       hilog.warn(DOMAIN, TAG, 'load history failed: %{public}s', e.message);
     });
+  }
+
+  /** 从未排序连接列表挑最近使用的"内网 IP"直连 */
+  private pickLanConn(list: ConnectionProfile[]): ConnectionProfile | null {
+    for (const p of list) {
+      if (UrlUtils.isIpHost(p.url)) {
+        return p;
+      }
+    }
+    return null;
+  }
+
+  /** 最近使用的"公网隧道"连接（正则匹配 trycloudflare.com 后缀；子域名随机，不用域名比较） */
+  private pickTunnelConn(list: ConnectionProfile[]): ConnectionProfile | null {
+    for (const p of list) {
+      if (UrlUtils.isTunnelHost(p.url)) {
+        return p;
+      }
+    }
+    return null;
   }
 
   /** 校验并打开一个连接：存历史 → 跳 WebShell。 */
@@ -202,14 +226,7 @@ struct Index {
         this.pushChecking = false;
         return;
       }
-      const base = list[0].url.replace(/\/+$/, '');
-      let host: string = '';
-      const protoEnd = base.indexOf('://');
-      if (protoEnd >= 0) {
-        let rest = base.substring(protoEnd + 3);
-        const colon = rest.indexOf(':');
-        host = colon >= 0 ? rest.substring(0, colon) : rest;
-      }
+      const host = this.store.pushHostOf(list);
       if (host.length === 0) {
         this.pushOnline = false;
         this.pushChecking = false;
@@ -528,15 +545,27 @@ struct Index {
 
       this.LatestSessionCard()
 
-      if (this.connections.length > 0) {
+      if (this.lanConn !== null) {
         ConnectionCard({
-          profile: this.connections[0],
+          profile: this.lanConn!,
           deleteEnabled: false,
+          tag: '内网 IP',
           onOpen: (url: string) => {
             this.openUrl(url);
           }
         })
-      } else {
+      }
+      if (this.tunnelConn !== null) {
+        ConnectionCard({
+          profile: this.tunnelConn!,
+          deleteEnabled: false,
+          tag: '公网隧道',
+          onOpen: (url: string) => {
+            this.openUrl(url);
+          }
+        })
+      }
+      if (this.lanConn === null && this.tunnelConn === null) {
         this.EmptyHistory()
       }
 

@@ -23,16 +23,32 @@ export struct ConnectionCard {
   onRemove: (url: string) => void = () => {};
   /** 是否启用长按删除（首页展示禁用，删除在历史页进行） */
   deleteEnabled: boolean = true;
+  /** 可选标签（如"内网 IP"/"公网隧道"）；为空则不显示 */
+  tag: string = '';
 
   build() {
     Row({ space: 12 }) {
       Column({ space: 4 }) {
-        Text(UrlUtils.display(this.profile.url, 30))
-          .fontSize(15)
-          .fontColor($r('app.color.text_primary'))
-          .maxLines(1)
-          .textOverflow({ overflow: TextOverflow.Ellipsis })
-          .alignSelf(ItemAlign.Start)
+        Row({ space: 8 }) {
+          if (this.tag.length > 0) {
+            Text(this.tag)
+              .fontSize(10)
+              .fontColor('#FFFFFF')
+              .backgroundColor(this.tag === '公网隧道' ? '#F5A623' : '#4E6EF2')
+              .padding({ left: 6, right: 6, top: 2, bottom: 2 })
+              .borderRadius(4)
+              .alignSelf(ItemAlign.Center)
+          }
+          Text(UrlUtils.display(this.profile.url, 30))
+            .fontSize(15)
+            .fontColor($r('app.color.text_primary'))
+            .maxLines(1)
+            .textOverflow({ overflow: TextOverflow.Ellipsis })
+            .layoutWeight(1)
+            .alignSelf(ItemAlign.Center)
+        }
+        .width('100%')
+        .alignItems(VerticalAlign.Center)
         Text('最近使用：' + formatRelative(this.profile.lastUsedAt))
           .fontSize(12)
           .fontColor($r('app.color.text_secondary'))
