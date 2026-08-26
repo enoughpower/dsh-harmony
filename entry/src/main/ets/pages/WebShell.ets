@@ -28,7 +28,7 @@ const TAG = 'DSHHarmony';
 @Component
 struct WebShell {
   @State url: string = 'about:blank';
-  @State title: string = 'DSH';
+  @State title: string = '口袋工作台';
   @State loading: boolean = true;
   @State progress: number = 0;
   @State failed: boolean = false;
@@ -484,7 +484,7 @@ struct WebShell {
           this.backHome();
         })
       Blank()
-      Text('DSH Harmony · 配合 dsh-pocket 使用')
+      Text('口袋工作台 · 配合电脑端插件使用')
         .fontSize(11)
         .fontColor($r('app.color.text_secondary'))
         .textAlign(TextAlign.Center)

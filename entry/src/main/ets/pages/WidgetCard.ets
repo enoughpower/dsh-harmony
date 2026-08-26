@@ -5,8 +5,8 @@
 @Entry
 @Component
 struct WidgetCard {
-  @LocalStorageProp('appName') appName: string = 'DSH Harmony';
-  @LocalStorageProp('lastUrlDisplay') lastUrlDisplay: string = '扫码连接 DSH';
+  @LocalStorageProp('appName') appName: string = '口袋工作台';
+  @LocalStorageProp('lastUrlDisplay') lastUrlDisplay: string = '扫码连接工作台';
   @LocalStorageProp('lastUrl') lastUrl: string = '';
   @LocalStorageProp('online') online: string = 'unknown';
   @LocalStorageProp('lastUsedLabel') lastUsedLabel: string = '';
@@ -102,7 +102,7 @@ struct WidgetCard {
 
       Blank()
 
-      Button('打开 DSH')
+      Button('打开工作台')
         .width('100%')
         .height(28)
         .fontSize(12)

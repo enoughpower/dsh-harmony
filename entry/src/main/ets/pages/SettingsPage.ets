@@ -63,7 +63,7 @@ struct SettingsPage {
       this.discovered = found;
       this.scanning = false;
       if (found.length === 0) {
-        promptAction.showToast({ message: '未发现局域网 DSH 服务' });
+        promptAction.showToast({ message: '未发现局域网工作台服务' });
       }
     }).catch(() => {
       this.scanning = false;
@@ -323,7 +323,7 @@ struct SettingsPage {
       Column({ space: 8 }) {
         this.SectionTitle('Web 数据')
         Column({ space: 1 }) {
-        this.RowItem('清除缓存与 Cookie（重新登录 dsh-pocket）', () => {
+        this.RowItem('清除缓存与 Cookie（需重新登录电脑端）', () => {
           this.clearWebData();
         })
         }
@@ -335,11 +335,11 @@ struct SettingsPage {
       Column({ space: 8 }) {
         this.SectionTitle('关于')
         Column({ space: 4 }) {
-          Text('DSH Harmony v' + this.version)
+          Text('口袋工作台 v' + this.version)
             .fontSize(15)
             .fontColor($r('app.color.text_primary'))
-          Text('DeepSeek Harness 原生客户端，配合 dsh-pocket 插件使用。' +
-            '扫码或手动输入 dsh-pocket 设置页的地址，即可在手机上使用电脑上的 DSH。')
+          Text('随身连接你电脑上的 AI 工作区。扫码或输入电脑端地址，手机即可查看会话、' +
+            '管理任务并接收完成提醒。')
             .fontSize(13)
             .fontColor($r('app.color.text_secondary'))
             .textAlign(TextAlign.Start)

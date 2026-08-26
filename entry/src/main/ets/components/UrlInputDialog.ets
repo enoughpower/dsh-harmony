@@ -22,7 +22,7 @@ export struct UrlInputDialog {
           this.input = value;
         })
 
-      Text('提示：填 dsh-pocket 设置页显示的地址，或你的公网隧道地址')
+      Text('提示：填电脑端设置页显示的地址，或你的公网隧道地址')
         .fontSize(12)
         .fontColor($r('app.color.text_secondary'))
         .maxLines(2)

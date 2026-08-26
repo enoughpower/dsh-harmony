@@ -4,7 +4,7 @@
  */
 export class AppConstants {
   /** 应用名 */
-  static readonly APP_NAME: string = 'DSH Harmony';
+  static readonly APP_NAME: string = '口袋工作台';
   /** Preferences 存储名 */
   static readonly STORE_NAME: string = 'dsh_harmony_store';
   /** 连接历史存储 key */

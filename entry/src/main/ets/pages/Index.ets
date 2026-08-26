@@ -358,12 +358,12 @@ struct Index {
   Header() {
     Row() {
       Column({ space: 2 }) {
-        Text('DSH Harmony')
+        Text('口袋工作台')
           .fontSize(22)
           .fontWeight(FontWeight.Bold)
           .fontColor($r('app.color.text_primary'))
           .alignSelf(ItemAlign.Start)
-        Text('DeepSeek Harness 口袋客户端')
+        Text('随时连接你电脑上的 AI 工作区')
           .fontSize(13)
           .fontColor($r('app.color.text_secondary'))
           .alignSelf(ItemAlign.Start)
@@ -499,7 +499,7 @@ struct Index {
       Text('还没有连接记录')
         .fontSize(15)
         .fontColor($r('app.color.text_primary'))
-      Text('在电脑端 DSH 安装 dsh-pocket 插件，设置页出现二维码后扫码即可连接')
+      Text('在电脑端安装配套插件，设置页出现二维码后扫码即可连接')
         .fontSize(13)
         .fontColor($r('app.color.text_secondary'))
         .textAlign(TextAlign.Center)

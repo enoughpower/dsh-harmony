@@ -19,9 +19,9 @@ export class CardSync {
   /** 卡片默认数据（无连接时） */
   static defaultData(): Record<string, string> {
     return {
-      'appName': 'DSH Harmony',
+      'appName': '口袋工作台',
       'lastUrl': '',
-      'lastUrlDisplay': '扫码连接 DSH',
+      'lastUrlDisplay': '扫码连接工作台',
       'online': 'unknown',
       'lastUsedLabel': '',
       'sessionTitle': '',
