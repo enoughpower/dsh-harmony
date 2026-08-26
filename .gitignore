@@ -50,3 +50,7 @@ tools/push-notify/tokens.backup.json
 # ---- 备份文件 / 开发产物 ----
 *.bak
 .artifacts/
+
+# ---- 发布产物(默认忽略,仅保留 RELEASE_NOTES) ----
+/release/*
+!/release/RELEASE_NOTES*.md
