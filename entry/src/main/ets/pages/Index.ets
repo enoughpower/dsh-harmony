@@ -235,15 +235,26 @@ struct Index {
     return this.leftStack.length > 0 ? this.leftStack[this.leftStack.length - 1] : 'home';
   }
   private pushLeft(r: string): void {
-    this.leftStack = this.leftStack.concat([r]);
+    this.getUIContext().animateTo({ duration: 220, curve: Curve.EaseInOut }, () => {
+      this.leftStack = this.leftStack.concat([r]);
+    });
   }
   private popLeft(): void {
     if (this.leftStack.length > 1) {
-      this.leftStack = this.leftStack.slice(0, this.leftStack.length - 1);
+      this.getUIContext().animateTo({ duration: 220, curve: Curve.EaseInOut }, () => {
+        this.leftStack = this.leftStack.slice(0, this.leftStack.length - 1);
+      });
     }
   }
   private navigateWeb(url: string): void {
     this.webUrl = url;
+  }
+
+  /** 左栏路由切换过渡动画：淡入 + 自右 24 平移 */
+  private routeTransition(): TransitionEffect {
+    return TransitionEffect.opacity(0)
+      .combine(TransitionEffect.translate({ x: 24 }))
+      .animation({ duration: 220, curve: Curve.EaseInOut });
   }
 
   /** 检查电脑端推送服务在线状态（GET host:3082/api/status，3s 超时） */
@@ -588,14 +599,13 @@ struct Index {
   @Builder
   WideLayout() {
     Row() {
-      if (!this.collapsed) {
-        Column() {
-          this.LeftRouteView()
-        }
-        .width(360)
-        .height('100%')
-        .backgroundColor($r('app.color.page_background'))
+      Column() {
+        this.LeftRouteView()
       }
+      .width(this.collapsed ? 0 : 360)
+      .height('100%')
+      .clip(true)
+      .backgroundColor($r('app.color.page_background'))
       Stack({ alignContent: Alignment.Start }) {
         if (this.webUrl !== '') {
           WebShellView({ url: this.webUrl, statusBarH: this.statusBarH })
@@ -629,7 +639,9 @@ struct Index {
         .margin({ left: 8 })
         .zIndex(10)
         .onClick(() => {
-          this.collapsed = !this.collapsed;
+          this.getUIContext().animateTo({ duration: 240, curve: Curve.EaseInOut }, () => {
+            this.collapsed = !this.collapsed;
+          });
         })
       }
       .layoutWeight(1)
@@ -642,28 +654,43 @@ struct Index {
   @Builder
   LeftRouteView() {
     if (this.leftStackTop() === 'settings') {
-      SettingsView({
-        onBack: () => {
-          this.popLeft();
-        },
-        onOpenHistory: () => {
-          this.pushLeft('history');
-        },
-        onOpenConnection: (url: string) => {
-          this.navigateWeb(url);
-        }
-      })
+      Column() {
+        SettingsView({
+          onBack: () => {
+            this.popLeft();
+          },
+          onOpenHistory: () => {
+            this.pushLeft('history');
+          },
+          onOpenConnection: (url: string) => {
+            this.navigateWeb(url);
+          }
+        })
+      }
+      .width('100%')
+      .height('100%')
+      .transition(this.routeTransition())
     } else if (this.leftStackTop() === 'history') {
-      HistoryView({
-        onBack: () => {
-          this.popLeft();
-        },
-        onOpen: (url: string) => {
-          this.navigateWeb(url);
-        }
-      })
+      Column() {
+        HistoryView({
+          onBack: () => {
+            this.popLeft();
+          },
+          onOpen: (url: string) => {
+            this.navigateWeb(url);
+          }
+        })
+      }
+      .width('100%')
+      .height('100%')
+      .transition(this.routeTransition())
     } else {
-      this.MainContent()
+      Column() {
+        this.MainContent()
+      }
+      .width('100%')
+      .height('100%')
+      .transition(this.routeTransition())
     }
   }
 
