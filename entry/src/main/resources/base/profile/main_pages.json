@@ -1,8 +1,6 @@
 {
   "src": [
     "pages/Index",
-    "pages/WebShell",
-    "pages/SettingsPage",
-    "pages/HistoryPage"
+    "pages/WebShell"
   ]
 }

@@ -6,6 +6,9 @@ import { router } from '@kit.ArkUI';
  */
 @Component
 export struct BackButton {
+  /** 容器导航栈返回回调；未提供时回退为 router.back() */
+  onBack: (() => void) | null = null;
+
   build() {
     Button() {
       SymbolGlyph($r('sys.symbol.chevron_left'))
@@ -24,7 +27,11 @@ export struct BackButton {
     })
     .stateEffect(false)
     .onClick(() => {
-      router.back();
+      if (this.onBack !== null) {
+        this.onBack();
+      } else {
+        router.back();
+      }
     })
   }
 }
