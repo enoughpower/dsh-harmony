@@ -1,4 +1,4 @@
-import { router, promptAction } from '@kit.ArkUI';
+import { promptAction } from '@kit.ArkUI';
 import { common } from '@kit.AbilityKit';
 import { ConnectionProfile } from '../model/ConnectionProfile';
 import { ConnectionStore } from '../common/store/ConnectionStore';
@@ -10,9 +10,11 @@ import { WindowBar } from '../common/utils/WindowBar';
 /**
  * 连接历史页：按 IP 去重、时间倒序，列表左滑删除，点击直达连接。
  */
-@Entry
 @Component
-struct HistoryPage {
+export struct HistoryView {
+  /** 容器导航回调 */
+  onBack: () => void = () => {};
+  onOpen: (url: string) => void = () => {};
   @State entries: ConnectionProfile[] = [];
   /** 状态栏高度（沉浸式内容留白，不挡状态栏） */
   @State statusBarH: number = 28;
@@ -20,11 +22,7 @@ struct HistoryPage {
 
   aboutToAppear(): void {
     this.reload();
-  }
-
-  onPageShow(): void {
-    this.reload();
-    // 实测状态栏高度（沉浸式由 EntryAbility 全局设置）
+    // 实测状态栏高度（沉浸式由 EntryAbility 全局设置；作为容器内的组件也需避让）
     const ctx = this.getUIContext().getHostContext() as common.UIAbilityContext;
     WindowBar.statusBarHeight(ctx, (px: number) => this.getUIContext().px2vp(px)).then((h: number) => {
       this.statusBarH = h > 0 ? h : this.statusBarH;
@@ -48,7 +46,7 @@ struct HistoryPage {
     const ctx = this.getUIContext().getHostContext() as common.UIAbilityContext;
     this.store.upsert(ctx, new ConnectionProfile(normalized, UrlUtils.display(normalized, 32))).catch(() => {
     });
-    router.pushUrl({ url: 'pages/WebShell', params: { 'url': normalized } });
+    this.onOpen(normalized);
   }
 
   private remove(profile: ConnectionProfile): void {
@@ -76,7 +74,7 @@ struct HistoryPage {
   @Builder
   Header() {
     Row({ space: 12 }) {
-      BackButton()
+      BackButton({ onBack: () => { this.onBack(); } })
       Column({ space: 2 }) {
         Text('连接历史')
           .fontSize(22)

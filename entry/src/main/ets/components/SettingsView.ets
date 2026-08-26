@@ -1,6 +1,6 @@
 import { webview } from '@kit.ArkWeb';
 import { common, bundleManager } from '@kit.AbilityKit';
-import { promptAction, router } from '@kit.ArkUI';
+import { promptAction } from '@kit.ArkUI';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { BusinessError } from '@kit.BasicServicesKit';
 import { ConnectionStore } from '../common/store/ConnectionStore';
@@ -20,9 +20,12 @@ const TAG = 'DSHHarmony';
 /**
  * 设置页：连接历史管理、Web 数据清理、关于信息。
  */
-@Entry
 @Component
-struct SettingsPage {
+export struct SettingsView {
+  /** 容器导航回调：返回 / 打开历史 / 连接某地址 */
+  onBack: () => void = () => {};
+  onOpenHistory: () => void = () => {};
+  onOpenConnection: (url: string) => void = () => {};
   @State version: string = '1.0.0';
   @State historyCount: number = 0;
   @State autoConnect: boolean = true;
@@ -79,7 +82,7 @@ struct SettingsPage {
     const ctx = this.getUIContext().getHostContext() as common.UIAbilityContext;
     this.store.upsert(ctx, new ConnectionProfile(normalized, UrlUtils.display(normalized, 32))).catch(() => {
     });
-    router.pushUrl({ url: 'pages/WebShell', params: { 'url': normalized } });
+    this.onOpenConnection(normalized);
   }
 
   private loadLanPin(): void {
@@ -215,7 +218,7 @@ struct SettingsPage {
   MainContent() {
     Column({ space: 16 }) {
       Row({ space: 12 }) {
-        BackButton()
+        BackButton({ onBack: () => { this.onBack(); } })
         Text('设置')
           .fontSize(22)
           .fontWeight(FontWeight.Bold)
@@ -240,7 +243,7 @@ struct SettingsPage {
           .padding({ left: 16, right: 16 })
           .backgroundColor($r('app.color.card_background'))
           .onClick(() => {
-            router.pushUrl({ url: 'pages/HistoryPage' });
+            this.onOpenHistory();
           })
           Row() {
             Text('自动连接最近的 IP')

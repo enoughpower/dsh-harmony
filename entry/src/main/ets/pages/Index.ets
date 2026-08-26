@@ -1,5 +1,5 @@
 import { abilityAccessCtrl, common, Permissions } from '@kit.AbilityKit';
-import { promptAction } from '@kit.ArkUI';
+import { router, promptAction } from '@kit.ArkUI';
 import { scanBarcode, scanCore } from '@kit.ScanKit';
 import { fileIo } from '@kit.CoreFileKit';
 import { util } from '@kit.ArkTS';
@@ -18,8 +18,8 @@ import { PocketApi, LatestSessionInfo, SessionQueryResult } from '../common/util
 import { http } from '@kit.NetworkKit';
 import { notificationManager } from '@kit.NotificationKit';
 import { WebShellView } from '../components/WebShellView';
-import { SettingsView } from './SettingsPage';
-import { HistoryView } from './HistoryPage';
+import { SettingsView } from '../components/SettingsView';
+import { HistoryView } from '../components/HistoryView';
 import { DeviceUtils } from '../common/utils/DeviceUtils';
 
 const DOMAIN = 0x0000;
@@ -50,8 +50,6 @@ struct Index {
   @State collapsed: boolean = false;
   /** 当前 Web 连接地址 */
   @State webUrl: string = '';
-  /** 窄屏是否展示 Web（连接后全屏 Web） */
-  @State webOpen: boolean = false;
   /** 左栏导航栈：home / settings / history */
   @State leftStack: string[] = ['home'];
   private pushTimer: number = -1;
@@ -224,9 +222,12 @@ struct Index {
     }).catch((e: BusinessError) => {
       hilog.warn(DOMAIN, TAG, 'save connection failed: %{public}s', e.message);
     });
-    // 统一容器：连接后加载到右侧（宽屏）或全屏（窄屏）Web
-    this.webUrl = url;
-    this.webOpen = true;
+    // 两套交互：窄屏(手机)跳独立 WebShell 页；宽屏(平板)加载到右侧 Web
+    if (this.wide) {
+      this.webUrl = url;
+    } else {
+      router.pushUrl({ url: 'pages/WebShell', params: { 'url': url } });
+    }
   }
 
   /** 左栏导航栈顶 */
@@ -243,10 +244,6 @@ struct Index {
   }
   private navigateWeb(url: string): void {
     this.webUrl = url;
-    this.webOpen = true;
-  }
-  private closeWeb(): void {
-    this.webOpen = false;
   }
 
   /** 检查电脑端推送服务在线状态（GET host:3082/api/status，3s 超时） */
@@ -435,7 +432,11 @@ struct Index {
       .backgroundColor($r('app.color.button_surface'))
       .stateEffect(false)
       .onClick(() => {
-        this.pushLeft('settings');
+        if (this.wide) {
+          this.pushLeft('settings');
+        } else {
+          router.pushUrl({ url: 'pages/SettingsPage' });
+        }
       })
     }
     .width('100%')
@@ -567,7 +568,7 @@ struct Index {
       if (this.wide) {
         this.WideLayout()
       } else {
-        this.NarrowLayout()
+        this.MainContent()
       }
     }
     .width('100%')
@@ -636,48 +637,6 @@ struct Index {
     }
     .width('100%')
     .height('100%')
-  }
-
-  @Builder
-  NarrowLayout() {
-    if (this.webOpen && this.webUrl !== '') {
-      Column({ space: 0 }) {
-        Row() {
-          Button() {
-            SymbolGlyph($r('sys.symbol.chevron_left'))
-              .fontSize(22)
-              .fontColor([$r('app.color.text_primary')])
-          }
-          .width(40)
-          .height(40)
-          .borderRadius(20)
-          .backgroundColor($r('app.color.floating_surface'))
-          .stateEffect(false)
-          .onClick(() => {
-            this.closeWeb();
-          })
-          Text('口袋工作台')
-            .fontSize(16)
-            .fontWeight(FontWeight.Medium)
-            .fontColor($r('app.color.text_primary'))
-            .padding({ left: 8 })
-          Blank()
-        }
-        .width('100%')
-        .height(48)
-        .padding({ left: 8, right: 8, top: this.statusBarH })
-        .alignItems(VerticalAlign.Center)
-        .backgroundColor($r('app.color.page_background'))
-        WebShellView({ url: this.webUrl, statusBarH: 0 })
-          .layoutWeight(1)
-          .width('100%')
-      }
-      .width('100%')
-      .height('100%')
-      .backgroundColor($r('app.color.page_background'))
-    } else {
-      this.LeftRouteView()
-    }
   }
 
   @Builder
