@@ -595,7 +595,7 @@ struct Index {
         .height('100%')
         .backgroundColor($r('app.color.page_background'))
       }
-      Stack() {
+      Stack({ alignContent: Alignment.Start }) {
         if (this.webUrl !== '') {
           WebShellView({ url: this.webUrl, statusBarH: this.statusBarH })
             .width('100%')
@@ -625,7 +625,7 @@ struct Index {
         .borderRadius(18)
         .backgroundColor($r('app.color.floating_surface'))
         .stateEffect(false)
-        .position({ x: 8, y: this.statusBarH + 8 })
+        .margin({ left: 8 })
         .zIndex(10)
         .onClick(() => {
           this.collapsed = !this.collapsed;
