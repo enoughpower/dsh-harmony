@@ -46,7 +46,7 @@ tools/push-notify/tokens.backup.json
 /copyright/
 
 # ---- 图标产物(源 SVG 入库,PNG 本地) ----
-release/icon/*.png
+/release/
 
 # ---- 备份文件 / 开发产物 ----
 *.bak
