@@ -1,4 +1,4 @@
-# DSH Harmony
+# 口袋工作台（DSH Harmony）
 
 DeepSeek Harness 的 **HarmonyOS 原生客户端**，与 [dsh-pocket](https://github.com/shaobeichen/dsh-pocket) 插件配套使用：手机扫一扫电脑端 DSH 设置页的二维码，即可在手机上实时使用电脑上的 DeepSeek Harness。
 

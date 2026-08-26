@@ -2,15 +2,15 @@
   "string": [
     {
       "name": "module_desc",
-      "value": "DSH Harmony entry module"
+      "value": "口袋工作台主模块"
     },
     {
       "name": "EntryAbility_desc",
-      "value": "DSH Harmony main entry"
+      "value": "口袋工作台主入口"
     },
     {
       "name": "EntryAbility_label",
-      "value": "DSH Harmony"
+      "value": "口袋工作台"
     },
     {
       "name": "camera_permission_reason",
@@ -22,7 +22,7 @@
     },
     {
       "name": "EntryFormAbility_label",
-      "value": "DSH 快捷连接"
+      "value": "口袋工作台快捷连接"
     },
     {
       "name": "EntryFormAbility_desc",
@@ -30,11 +30,11 @@
     },
     {
       "name": "form_dsh_quick_name",
-      "value": "DSH 快捷连接"
+      "value": "口袋工作台快捷连接"
     },
     {
       "name": "form_dsh_quick_desc",
-      "value": "一键打开最近使用的 DSH 连接"
+      "value": "一键打开最近使用的连接"
     }
   ]
 }
