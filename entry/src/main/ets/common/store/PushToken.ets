@@ -6,6 +6,7 @@ import { hilog } from '@kit.PerformanceAnalysisKit';
 import { fileIo } from '@kit.CoreFileKit';
 import { util } from '@kit.ArkTS';
 import { ConnectionStore } from './ConnectionStore';
+import { UrlUtils } from '../utils/UrlUtils';
 
 const DOMAIN = 0x0000;
 const TAG = 'DSHHarmony';
@@ -78,7 +79,11 @@ export class PushToken {
     if (list.length === 0) {
       return;
     }
-    // 上报给电脑端推送服务（:3082；用内网 IP 主机；隧道域名/端口不在公网暴露，无法回连 3082）
+    // 隧道连接：3082 不在公网/隧道暴露，上报必然失败，直接跳过（token 早已在 LAN 连接时上报并保存在电脑端）
+    if (UrlUtils.isTunnelHost(list[0].url)) {
+      return;
+    }
+    // 优先保 LAN 连接：用内网 IP 主机上报（pushHostOf 取最近的内网 IP；无内网时回退最近连接主机）
     const host = store.pushHostOf(list);
     const reportBase = host.length > 0 ? 'http://' + host + ':3082' : list[0].url.replace(/\/+$/, '');
     const rpc: PushTokenRpc = {
