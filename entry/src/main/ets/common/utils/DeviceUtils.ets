@@ -1,19 +1,34 @@
 /**
  * 设备/窗口布局判定。
- * 规则（用户确认）：仅"平板 + 横屏"触发双栏；手机/平板竖屏保持单栏。
- * 容器用 onAreaChange 拿宽高判断横竖屏，这里提供设备类型与组合判定。
+ * 规则（用户确认）：平板默认双栏；折叠屏手机"展开+横屏"也双栏；普通手机锁竖屏单栏。
+ * 容器用 onAreaChange 拿窗口宽高判断横竖屏。
  */
 import { deviceInfo } from '@kit.BasicServicesKit';
+import { display } from '@kit.ArkUI';
 
 export class DeviceUtils {
-  /** 是否平板 / 2in1（pad pc）：手机 false；折叠屏按其系统返回 */
+  /** 是否平板 / 2in1（pad pc）；普通手机 false */
   static isTablet(): boolean {
     const t = deviceInfo.deviceType;
     return t === 'tablet' || t === '2in1';
   }
 
-  /** 是否触发双栏：平板/pad-pc 且横屏（宽>高）。竖屏或手机均 false。 */
-  static shouldSplitTabletLandscape(width: number, height: number): boolean {
-    return DeviceUtils.isTablet() && width > height;
+  /** 是否为"大屏"(平板 / 折叠屏展开)：display 宽度换算 vp >= 600（普通手机竖屏约 360vp） */
+  static isLargeDisplay(): boolean {
+    try {
+      const d = display.getDefaultDisplaySync();
+      const vpWidth = d.width * 160 / d.densityDPI;
+      return vpWidth >= 600;
+    } catch (e) {
+      return DeviceUtils.isTablet();
+    }
+  }
+
+  /** 是否触发双栏：平板默认双栏；或大屏(折叠屏展开)且横屏(宽>高)。普通手机 false。 */
+  static shouldSplit(width: number, height: number): boolean {
+    if (DeviceUtils.isTablet()) {
+      return true;
+    }
+    return DeviceUtils.isLargeDisplay() && width > height;
   }
 }

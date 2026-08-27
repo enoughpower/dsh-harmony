@@ -601,7 +601,7 @@ struct Index {
     .onAreaChange((oldValue: Area, newValue: Area) => {
       const w = newValue.width as number;
       const h = newValue.height as number;
-      const nowWide = DeviceUtils.shouldSplitTabletLandscape(w, h);
+      const nowWide = DeviceUtils.shouldSplit(w, h);
       if (nowWide !== this.wide) {
         this.wide = nowWide;
       }
