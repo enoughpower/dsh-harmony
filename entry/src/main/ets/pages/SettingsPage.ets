@@ -31,6 +31,7 @@ struct SettingsPage {
   @State discovered: DiscoveredService[] = [];
   /** 状态栏高度（沉浸式内容留白，不挡状态栏） */
   @State statusBarH: number = 28;
+  @State bottomBarH: number = 0;
   private store: ConnectionStore = new ConnectionStore();
 
   aboutToAppear(): void {
@@ -42,6 +43,9 @@ struct SettingsPage {
     const ctx = this.getUIContext().getHostContext() as common.UIAbilityContext;
     WindowBar.statusBarHeight(ctx, (px: number) => this.getUIContext().px2vp(px)).then((h: number) => {
       this.statusBarH = h > 0 ? h : this.statusBarH;
+    });
+    WindowBar.bottomBarHeight(ctx, (px: number) => this.getUIContext().px2vp(px)).then((h: number) => {
+      this.bottomBarH = h > 0 ? h : this.bottomBarH;
     });
   }
 
@@ -356,7 +360,7 @@ struct SettingsPage {
     }
     .width('100%')
     .height('100%')
-    .padding({ left: 20, right: 20, top: this.statusBarH + 16, bottom: 20 })
+    .padding({ left: 20, right: 20, top: this.statusBarH + 16, bottom: this.bottomBarH + 28 })
     .backgroundColor($r('app.color.page_background'))
     .alignItems(HorizontalAlign.Center)
   }

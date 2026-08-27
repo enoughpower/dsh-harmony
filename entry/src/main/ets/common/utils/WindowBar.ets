@@ -54,6 +54,14 @@ export class WindowBar {
     }).catch(() => 0);
   }
 
+  /** 底部导航条/手势条高度（vp）。px 转 vp 交由调用方 UIContext.px2vp。 */
+  static bottomBarHeight(context: common.Context, px2vp: (px: number) => number): Promise<number> {
+    return window.getLastWindow(context).then((w: window.Window) => {
+      const area = w.getWindowAvoidArea(window.AvoidAreaType.TYPE_SYSTEM);
+      return px2vp(area.bottomRect.height);
+    }).catch(() => 0);
+  }
+
   /** 是否深色模式（ResourceManager 解析主题色,跟随系统;冷启动 config.colorMode=NOT_SET 时仍可靠） */
   static isDark(context: common.Context): boolean {
     try {

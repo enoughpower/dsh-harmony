@@ -44,6 +44,8 @@ struct Index {
   @State pushChecking: boolean = false;
   /** 状态栏高度（沉浸式时内容顶部留白），onPageShow 实测校正 */
   @State statusBarH: number = 28;
+  /** 底部导航条/手势条高度（避让用） */
+  @State bottomBarH: number = 0;
   /** 平板+横屏双栏 */
   @State wide: boolean = false;
   /** 左栏是否收起（宽屏） */
@@ -114,6 +116,9 @@ struct Index {
     AppStorage.setOrCreate('osThemeIsDark', WindowBar.isDark(barCtx));
     WindowBar.statusBarHeight(barCtx, (px: number) => this.getUIContext().px2vp(px)).then((h: number) => {
       this.statusBarH = h > 0 ? h : this.statusBarH;
+    });
+    WindowBar.bottomBarHeight(barCtx, (px: number) => this.getUIContext().px2vp(px)).then((h: number) => {
+      this.bottomBarH = h > 0 ? h : this.bottomBarH;
     });
     // 打开首页时同步服务卡片状态（在线探测）
     const synCtx = this.getUIContext().getHostContext() as common.UIAbilityContext;
@@ -732,7 +737,7 @@ struct Index {
     }
     .width('100%')
     .height('100%')
-    .padding({ left: 20, right: 20, top: this.statusBarH + 16, bottom: 20 })
+    .padding({ left: 20, right: 20, top: this.statusBarH + 16, bottom: this.bottomBarH + 28 })
     .backgroundColor($r('app.color.page_background'))
     .alignItems(HorizontalAlign.Center)
   }
