@@ -4,6 +4,7 @@ import { window } from '@kit.ArkUI';
 import { PushToken } from '../common/store/PushToken';
 import { WindowBar } from '../common/utils/WindowBar';
 import { DeviceUtils } from '../common/utils/DeviceUtils';
+import { FeatureFlags } from '../common/config/FeatureFlags';
 
 const DOMAIN = 0x0000;
 const TAG = 'DSHHarmony';
@@ -20,8 +21,10 @@ export default class EntryAbility extends UIAbility {
     hilog.info(DOMAIN, TAG, 'EntryAbility onCreate. reason=%{public}d', launchParam.launchReason);
     this.consumeCardUrl(want);
     // Push Kit：获取设备推送令牌并上报电脑端（未在 AGC 开通时静默，报 1000900012）
-    PushToken.ensureAndReport(this.context).catch(() => {
-    });
+    if (FeatureFlags.PUSH_ENABLED) {
+      PushToken.ensureAndReport(this.context).catch(() => {
+      });
+    }
   }
 
   onNewWant(want: Want): void {

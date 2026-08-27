@@ -21,6 +21,7 @@ import { WebShellView } from '../components/WebShellView';
 import { SettingsView } from '../components/SettingsView';
 import { HistoryView } from '../components/HistoryView';
 import { DeviceUtils } from '../common/utils/DeviceUtils';
+import { FeatureFlags } from '../common/config/FeatureFlags';
 
 const DOMAIN = 0x0000;
 const TAG = 'DSHHarmony';
@@ -106,7 +107,9 @@ struct Index {
 
   onPageShow(): void {
     // 新装首启请求通知权限(推送链路前置)
-    this.ensureNotifyPermission();
+    if (FeatureFlags.PUSH_ENABLED) {
+      this.ensureNotifyPermission();
+    }
     this.reloadHistory();
     // 沉浸式系统栏兜底：幂等重设（冷启动/时序问题/去其他页面后回首页都保证正确），并实测状态栏高度
     const barCtx = this.getUIContext().getHostContext() as common.UIAbilityContext;
@@ -127,12 +130,14 @@ struct Index {
     });
     // 最新会话卡片（首页展示）
     this.refreshSession();
-    // 电脑端推送服务在线状态（立即 + 15s 轮询）
-    this.checkPushStatus();
-    if (this.pushTimer < 0) {
-      this.pushTimer = setInterval(() => {
-        this.checkPushStatus();
-      }, 15000);
+    // 电脑端推送服务在线状态（立即 + 15s 轮询；上架版关闭）
+    if (FeatureFlags.PUSH_ENABLED) {
+      this.checkPushStatus();
+      if (this.pushTimer < 0) {
+        this.pushTimer = setInterval(() => {
+          this.checkPushStatus();
+        }, 15000);
+      }
     }
     if (this.sessionTimer < 0) {
       this.sessionTimer = setInterval(() => {
@@ -221,9 +226,11 @@ struct Index {
       CardSync.syncAll(ctx).catch(() => {
         hilog.warn(DOMAIN, TAG, 'card sync failed');
       });
-      // 连接建立后立即上报推送 token(重装/首连场景不等冷启动)
-      PushToken.ensureAndReport(ctx).catch(() => {
-      });
+      // 连接建立后立即上报推送 token(重装/首连场景不等冷启动；上架版关闭)
+      if (FeatureFlags.PUSH_ENABLED) {
+        PushToken.ensureAndReport(ctx).catch(() => {
+        });
+      }
     }).catch((e: BusinessError) => {
       hilog.warn(DOMAIN, TAG, 'save connection failed: %{public}s', e.message);
     });
@@ -703,7 +710,9 @@ struct Index {
     Column({ space: 16 }) {
       this.Header()
 
-      this.PushStatusRow()
+      if (FeatureFlags.PUSH_ENABLED) {
+        this.PushStatusRow()
+      }
 
       this.LatestSessionCard()
 

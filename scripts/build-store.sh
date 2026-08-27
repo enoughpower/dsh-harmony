@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# build-store.sh —— 单分支(全功能 master)产出上架裁剪包
-# 原理: 临时应用 patches/store-no-push.patch(删推送) + 设置 versionCode → assembleApp → 还原
+# build-store.sh —— 单分支(全功能 master)产出上架裁剪包(无推送)
+# 原理: 临时把 FeatureFlags.PUSH_ENABLED 置为 false + 设置 versionCode → assembleApp → 还原
 # 用法: ./scripts/build-store.sh <versionCode> [产物名]
 set -eo pipefail
 : "${HOME:=$(cd ~ && pwd)}"
@@ -13,8 +13,8 @@ export DEVECO_SDK_HOME="${DEVECO_SDK_HOME:-$HOME/.harmony/command-line-tools/sdk
 cd "$ROOT"
 [ -z "$(git status --porcelain -- entry/src/main AppScope)" ] || { echo "工作区有未提交改动,先提交"; exit 1; }
 trap "git checkout -- entry/src/main AppScope 2>/dev/null || true" EXIT
-echo "==> 应用上架裁剪 patch"
-git apply patches/store-no-push.patch
+echo "==> 关闭推送开关 (FeatureFlags.PUSH_ENABLED=false)"
+sed -i '' 's/static readonly PUSH_ENABLED: boolean = true;/static readonly PUSH_ENABLED: boolean = false;/' entry/src/main/ets/common/config/FeatureFlags.ets
 python3 - <<PY
 import re, io
 p = 'AppScope/app.json5'
