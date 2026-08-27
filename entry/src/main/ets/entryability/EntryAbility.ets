@@ -92,9 +92,9 @@ export default class EntryAbility extends UIAbility {
     try {
       const win = this.winStage.getMainWindowSync();
       win.setWindowLayoutFullScreen(true);
-      // 允许横竖屏自动旋转（跟随系统；设备开了自动旋转即可转横屏）
+      // 平板/2in1：允许横竖屏自动旋转（横屏双栏）；手机：锁定竖屏（横屏体验差）
       try {
-        win.setPreferredOrientation(window.Orientation.AUTO_ROTATION);
+        win.setPreferredOrientation(DeviceUtils.isTablet() ? window.Orientation.AUTO_ROTATION : window.Orientation.PORTRAIT);
       } catch (e) {
         hilog.warn(DOMAIN, TAG, 'setPreferredOrientation failed: %{public}s', (e as Error).message);
       }
