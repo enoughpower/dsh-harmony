@@ -92,13 +92,11 @@ export default class EntryAbility extends UIAbility {
     try {
       const win = this.winStage.getMainWindowSync();
       win.setWindowLayoutFullScreen(true);
-      // 平板/2in1：允许横竖屏自动旋转（竖屏单栏 / 横屏双栏随屏幕方向切换）
-      if (DeviceUtils.isTablet()) {
-        try {
-          win.setPreferredOrientation(window.Orientation.AUTO_ROTATION);
-        } catch (e) {
-          hilog.warn(DOMAIN, TAG, 'setPreferredOrientation failed: %{public}s', (e as Error).message);
-        }
+      // 允许横竖屏自动旋转（跟随系统；设备开了自动旋转即可转横屏）
+      try {
+        win.setPreferredOrientation(window.Orientation.AUTO_ROTATION);
+      } catch (e) {
+        hilog.warn(DOMAIN, TAG, 'setPreferredOrientation failed: %{public}s', (e as Error).message);
       }
       // ResourceManager 解析主题色(跟随系统),不依赖 config.colorMode(冷启动可能 NOT_SET)
       const dark = WindowBar.isDark(this.context);
