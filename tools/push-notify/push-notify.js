@@ -88,7 +88,7 @@ async function huaweiSend(title, body) {
         },
       },
       target: { token: pushTokens },
-      pushOptions: { testMessage: true },
+      pushOptions: { testMessage: false },
     }),
   });
   const data = await res.json();
