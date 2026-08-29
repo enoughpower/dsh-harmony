@@ -496,6 +496,10 @@ struct Index {
             .width(16)
             .height(16)
         }
+        Text('›')
+          .fontSize(20)
+          .fontWeight(FontWeight.Medium)
+          .fontColor($r('app.color.text_secondary'))
       }
       .width('100%')
 
