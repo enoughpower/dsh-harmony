@@ -539,9 +539,7 @@ struct Index {
     .backgroundColor($r('app.color.card_background'))
     .borderRadius($r('app.float.card_corner_radius'))
     .onClick(() => {
-      if (!this.sessionLoading) {
-        this.refreshSession();
-      }
+      router.pushUrl({ url: 'pages/TasksPage' });
     })
   }
 

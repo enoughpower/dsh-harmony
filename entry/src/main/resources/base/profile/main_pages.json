@@ -1,6 +1,7 @@
 {
   "src": [
     "pages/Index",
+    "pages/TasksPage",
     "pages/WebShell",
     "pages/SettingsPage",
     "pages/HistoryPage"

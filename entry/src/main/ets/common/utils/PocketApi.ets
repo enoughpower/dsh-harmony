@@ -29,15 +29,42 @@ export interface LatestSessionInfo {
   steps: number;
 }
 
+/** 任务列表项（session.list 全量投影） */
+export interface TaskInfo {
+  sessionId: string;
+  title: string;
+  updatedAt: number;
+  running: boolean;
+  /** goal 阶段：active / paused / complete / '' */
+  phase: string;
+  turns: number;
+  steps: number;
+  objective: string;
+}
+
+export interface TaskListResult {
+  tasks: TaskInfo[];
+  error: string;
+  token: string;
+}
+
 /** session.list 响应结构（仅声明用到的字段） */
 interface SessionStats {
   turns?: number;
   steps?: number;
 }
 
+interface SessionGoalInner {
+  phase?: string;
+  objective?: string;
+}
+interface SessionGoal {
+  goal?: SessionGoalInner;
+}
 interface ProjectionValues {
   title?: string;
   sessionStats?: SessionStats;
+  goal?: SessionGoal;
 }
 
 interface Projections {
@@ -176,6 +203,79 @@ export class PocketApi {
       token = login.token;
     }
     return PocketApi.querySession(b, token);
+  }
+
+  /** 查询会话任务列表（session.list 全部项转 TaskInfo） */
+  static async listSessions(base: string, pin: string): Promise<TaskListResult> {
+    const b = base.replace(/\/+$/, '');
+    let token = '';
+    try {
+      const ck = webview.WebCookieManager.fetchCookieSync(b);
+      const m = ck.match(/dsh_pocket_token=([^;]+)/);
+      if (m !== null && m.length > 1) {
+        token = m[1].trim();
+      }
+    } catch (e) {
+    }
+    if (token.length === 0) {
+      const login = await PocketApi.login(b, pin);
+      if (!login.ok || login.token.length === 0) {
+        return { tasks: [], error: '未登录且登录失败: ' + login.detail, token: '' };
+      }
+      token = login.token;
+    }
+    return PocketApi.queryList(b, token);
+  }
+
+  /** 带令牌查询会话列表 */
+  private static async queryList(b: string, token: string): Promise<TaskListResult> {
+    const request = http.createHttp();
+    const body: ClientRequestMsg = {
+      'type': 'client-request',
+      'rpcId': 'dsh-harmony-tasklist',
+      'method': 'session.list',
+      'payload': {}
+    };
+    try {
+      const resp = await request.request(b + '/api/session.list?token=' + encodeURIComponent(token), {
+        method: http.RequestMethod.POST,
+        header: { 'Content-Type': 'application/json' },
+        extraData: JSON.stringify(body),
+        connectTimeout: 8000,
+        readTimeout: 12000
+      });
+      if (resp.responseCode !== 200) {
+        if (resp.responseCode === 401 || resp.responseCode === 403) {
+          PocketApi.expectedToken = '';
+        }
+        return { tasks: [], error: '服务返回 HTTP ' + String(resp.responseCode ?? 0), token: token };
+      }
+      const text = String(resp.result ?? '');
+      const parsed = JSON.parse(text) as SessionListResult;
+      const items = parsed.result?.value?.items ?? [];
+      const tasks: TaskInfo[] = [];
+      for (const it of items) {
+        const stats = it.projections?.values?.sessionStats;
+        tasks.push({
+          sessionId: it.sessionId ?? '',
+          title: it.projections?.values?.title ?? '',
+          updatedAt: it.updatedAt ?? 0,
+          running: it.running === true,
+          phase: it.projections?.values?.goal?.goal?.phase ?? '',
+          turns: stats?.turns ?? 0,
+          steps: stats?.steps ?? 0,
+          objective: it.projections?.values?.goal?.goal?.objective ?? ''
+        });
+      }
+      return { tasks, error: '', token: token };
+    } catch (e) {
+      return { tasks: [], error: '请求异常: ' + (e as Error).message.slice(0, 60), token: token };
+    } finally {
+      try {
+        request.destroy();
+      } catch (e) {
+      }
+    }
   }
 
   /** 带令牌查询最新会话（服务卡片等外部场景直接使用已保存令牌） */
