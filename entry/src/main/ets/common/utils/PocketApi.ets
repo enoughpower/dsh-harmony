@@ -75,11 +75,22 @@ interface SessionItem {
   sessionId?: string;
   updatedAt?: number;
   running?: boolean;
+  blank?: boolean;
   projections?: Projections;
 }
 
 interface SessionListValue {
   items?: SessionItem[];
+}
+
+interface WorkspaceListArchived {
+  archivedSessionIds?: string[];
+}
+interface WorkspaceListInner {
+  value?: WorkspaceListArchived;
+}
+interface WorkspaceListResult {
+  result?: WorkspaceListInner;
 }
 
 interface SessionListResultInner {
@@ -253,8 +264,12 @@ export class PocketApi {
       const text = String(resp.result ?? '');
       const parsed = JSON.parse(text) as SessionListResult;
       const items = parsed.result?.value?.items ?? [];
+      // 隐藏空白(未使用)会话 & 归档会话
+      const archived = await PocketApi.queryArchivedIds(b, token);
       const tasks: TaskInfo[] = [];
       for (const it of items) {
+        if (it.blank === true) continue;
+        if (it.sessionId !== undefined && it.sessionId.length > 0 && archived.indexOf(it.sessionId) >= 0) continue;
         const stats = it.projections?.values?.sessionStats;
         tasks.push({
           sessionId: it.sessionId ?? '',
@@ -270,6 +285,39 @@ export class PocketApi {
       return { tasks, error: '', token: token };
     } catch (e) {
       return { tasks: [], error: '请求异常: ' + (e as Error).message.slice(0, 60), token: token };
+    } finally {
+      try {
+        request.destroy();
+      } catch (e) {
+      }
+    }
+  }
+
+  /** 查询归档会话 id 集合（workspace.list 的 archivedSessionIds），用于过滤任务列表 */
+  private static async queryArchivedIds(b: string, token: string): Promise<string[]> {
+    const request = http.createHttp();
+    const body: ClientRequestMsg = {
+      'type': 'client-request',
+      'rpcId': 'dsh-harmony-archived',
+      'method': 'workspace.list',
+      'payload': {}
+    };
+    try {
+      const resp = await request.request(b + '/api/workspace.list?token=' + encodeURIComponent(token), {
+        method: http.RequestMethod.POST,
+        header: { 'Content-Type': 'application/json' },
+        extraData: JSON.stringify(body),
+        connectTimeout: 8000,
+        readTimeout: 12000
+      });
+      if (resp.responseCode !== 200) {
+        return [];
+      }
+      const text = String(resp.result ?? '');
+      const parsed = JSON.parse(text) as WorkspaceListResult;
+      return parsed.result?.value?.archivedSessionIds ?? [];
+    } catch (e) {
+      return [];
     } finally {
       try {
         request.destroy();
