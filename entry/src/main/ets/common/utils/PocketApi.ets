@@ -53,6 +53,30 @@ export interface ControlResult {
   error: string;
 }
 
+export interface SearchResult {
+  sessionId: string;
+  snippet: string;
+}
+
+export interface SearchResultSet {
+  results: SearchResult[];
+  error: string;
+}
+
+interface SearchItemValue {
+  sessionId?: string;
+  snippet?: string;
+}
+interface SearchValue {
+  items?: SearchItemValue[];
+}
+interface SearchResultInner {
+  value?: SearchValue;
+}
+interface SearchWire {
+  result?: SearchResultInner;
+}
+
 /** session.list 响应结构（仅声明用到的字段） */
 interface SessionStats {
   turns?: number;
@@ -323,6 +347,65 @@ export class PocketApi {
       return parsed.result?.value?.archivedSessionIds ?? [];
     } catch (e) {
       return [];
+    } finally {
+      try {
+        request.destroy();
+      } catch (e) {
+      }
+    }
+  }
+
+  /** 搜索会话（session.search）。返回匹配的 sessionId + 片段。 */
+  static async searchSessions(base: string, pin: string, query: string): Promise<SearchResultSet> {
+    const b = base.replace(/\/+$/, '');
+    let token = '';
+    try {
+      const ck = webview.WebCookieManager.fetchCookieSync(b);
+      const m = ck.match(/dsh_pocket_token=([^;]+)/);
+      if (m !== null && m.length > 1) {
+        token = m[1].trim();
+      }
+    } catch (e) {
+    }
+    if (token.length === 0) {
+      const login = await PocketApi.login(b, pin);
+      if (!login.ok || login.token.length === 0) {
+        return { results: [], error: '未登录且登录失败: ' + login.detail };
+      }
+      token = login.token;
+    }
+    const request = http.createHttp();
+    const body: ClientRequestMsg = {
+      'type': 'client-request',
+      'rpcId': 'dsh-harmony-search',
+      'method': 'session.search',
+      'payload': { 'query': query }
+    };
+    try {
+      const resp = await request.request(b + '/api/session.search?token=' + encodeURIComponent(token), {
+        method: http.RequestMethod.POST,
+        header: { 'Content-Type': 'application/json' },
+        extraData: JSON.stringify(body),
+        connectTimeout: 8000,
+        readTimeout: 12000
+      });
+      if (resp.responseCode !== 200) {
+        if (resp.responseCode === 401 || resp.responseCode === 403) {
+          PocketApi.expectedToken = '';
+        }
+        return { results: [], error: '服务返回 HTTP ' + String(resp.responseCode ?? 0) };
+      }
+      const text = String(resp.result ?? '');
+      const parsed = JSON.parse(text) as SearchWire;
+      const items = parsed.result?.value?.items ?? [];
+      const results: SearchResult[] = [];
+      for (const it of items) {
+        const sr: SearchResult = { sessionId: it.sessionId ?? '', snippet: it.snippet ?? '' };
+        results.push(sr);
+      }
+      return { results, error: '' };
+    } catch (e) {
+      return { results: [], error: '请求异常: ' + (e as Error).message.slice(0, 60) };
     } finally {
       try {
         request.destroy();

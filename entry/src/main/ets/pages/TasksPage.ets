@@ -4,7 +4,7 @@ import { webSocket } from '@kit.NetworkKit';
 import { BusinessError } from '@kit.BasicServicesKit';
 import { ConnectionStore } from '../common/store/ConnectionStore';
 import { AppPrefs } from '../common/store/AppPrefs';
-import { PocketApi, TaskInfo } from '../common/utils/PocketApi';
+import { PocketApi, TaskInfo, SearchResult } from '../common/utils/PocketApi';
 import { CardSync } from '../common/store/CardSync';
 import { WindowBar } from '../common/utils/WindowBar';
 import { BackButton } from '../components/BackButton';
@@ -31,6 +31,12 @@ struct TasksPage {
   private ws: webSocket.WebSocket | null = null;
   private wsRetry: number = 0;
   private refreshTimer: number = -1;
+  private searchTimer: number = -1;
+  @State query: string = '';
+  @State searchResults: SearchResult[] = [];
+  @State searching: boolean = false;
+  @State searchError: string = '';
+  @State refreshing: boolean = false;
   private store: ConnectionStore = new ConnectionStore();
 
   aboutToAppear(): void {
@@ -305,6 +311,93 @@ struct TasksPage {
     }
   }
 
+  private doSearch(): void {
+    if (this.searchTimer >= 0) {
+      clearTimeout(this.searchTimer);
+    }
+    this.searchTimer = setTimeout(() => {
+      this.searchTimer = -1;
+      this.runSearch();
+    }, 400);
+  }
+
+  private async runSearch(): Promise<void> {
+    const q = this.query.trim();
+    if (q.length === 0) {
+      this.searchResults = [];
+      this.searchError = '';
+      return;
+    }
+    this.searching = true;
+    const ctx = this.getUIContext().getHostContext() as common.UIAbilityContext;
+    const pin = await AppPrefs.getString(ctx, AppPrefs.KEY_LAN_PIN, AppPrefs.DEFAULT_LAN_PIN);
+    const r = await PocketApi.searchSessions(this.baseUrl, pin, q);
+    this.searchResults = r.results;
+    this.searchError = r.error;
+    this.searching = false;
+  }
+
+  private onPullRefresh(): void {
+    this.refreshing = true;
+    this.reload().then(() => {
+      this.refreshing = false;
+    }).catch(() => {
+      this.refreshing = false;
+    });
+  }
+
+  @Builder
+  SearchCard(r: SearchResult) {
+    Column({ space: 6 }) {
+      if (r.snippet.length > 0) {
+        Text(r.snippet)
+          .fontSize(13)
+          .fontColor($r('app.color.text_primary'))
+          .maxLines(3)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+          .alignSelf(ItemAlign.Start)
+      }
+      Text('ID: ' + r.sessionId.slice(0, 12))
+        .fontSize(11)
+        .fontColor($r('app.color.text_secondary'))
+        .alignSelf(ItemAlign.Start)
+    }
+    .width('100%')
+    .padding(16)
+    .backgroundColor($r('app.color.card_background'))
+    .borderRadius($r('app.float.card_corner_radius'))
+    .onClick(() => {
+      this.openTask(this.baseUrl);
+    })
+  }
+
+  @Builder
+  SearchList() {
+    if (this.searching) {
+      Column() {
+        LoadingProgress().width(24).height(24)
+      }
+      .width('100%').height(160).justifyContent(FlexAlign.Center)
+    } else if (this.searchResults.length === 0) {
+      Column({ space: 8 }) {
+        Text('无匹配会话').fontSize(15).fontColor($r('app.color.text_primary'))
+        if (this.searchError.length > 0) {
+          Text(this.searchError).fontSize(12).fontColor($r('app.color.text_secondary')).textAlign(TextAlign.Center)
+        }
+      }
+      .width('100%').padding({ top: 40 })
+    } else {
+      List({ space: 12 }) {
+        ForEach(this.searchResults, (r: SearchResult) => {
+          ListItem() {
+            this.SearchCard(r)
+          }
+        }, (r: SearchResult) => r.sessionId + r.snippet)
+      }
+      .width('100%').layoutWeight(1).scrollBar(BarState.Auto)
+    }
+  }
+
   private statusLabel(t: TaskInfo): string {
     if (t.running) return '进行中';
     if (t.phase === 'paused') return '已暂停';
@@ -323,24 +416,43 @@ struct TasksPage {
     Column() {
       Column({ space: 16 }) {
         this.Header()
+        TextInput({ text: this.query, placeholder: '搜索会话…' })
+          .height(40)
+          .fontSize(14)
+          .padding({ left: 12, right: 12 })
+          .backgroundColor($r('app.color.card_background'))
+          .borderRadius($r('app.float.card_corner_radius'))
+          .onChange((v: string) => {
+            this.query = v;
+            this.doSearch();
+          })
         if (this.loading) {
           Column() {
             LoadingProgress().width(28).height(28)
           }
           .width('100%').height(200).justifyContent(FlexAlign.Center)
+        } else if (this.query.trim().length > 0) {
+          this.SearchList()
         } else if (this.tasks.length === 0) {
           this.Empty()
         } else {
-          List({ space: 12 }) {
-            ForEach(this.tasks, (t: TaskInfo) => {
-              ListItem() {
-                this.TaskCard(t)
-              }
-            }, (t: TaskInfo) => t.sessionId)
+          Refresh({ refreshing: this.refreshing, offset: 40 }) {
+            List({ space: 12 }) {
+              ForEach(this.tasks, (t: TaskInfo) => {
+                ListItem() {
+                  this.TaskCard(t)
+                }
+              }, (t: TaskInfo) => t.sessionId)
+            }
+            .width('100%')
+            .layoutWeight(1)
+            .scrollBar(BarState.Auto)
           }
+          .onRefreshing(() => {
+            this.onPullRefresh();
+          })
           .width('100%')
           .layoutWeight(1)
-          .scrollBar(BarState.Auto)
         }
       }
       .width('100%')
