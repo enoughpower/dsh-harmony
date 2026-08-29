@@ -1,5 +1,7 @@
 import { router, promptAction } from '@kit.ArkUI';
 import { common } from '@kit.AbilityKit';
+import { webSocket } from '@kit.NetworkKit';
+import { BusinessError } from '@kit.BasicServicesKit';
 import { ConnectionStore } from '../common/store/ConnectionStore';
 import { AppPrefs } from '../common/store/AppPrefs';
 import { PocketApi, TaskInfo } from '../common/utils/PocketApi';
@@ -25,6 +27,10 @@ struct TasksPage {
   @State statusBarH: number = 28;
   private timer: number = -1;
   private baseUrl: string = '';
+  private token: string = '';
+  private ws: webSocket.WebSocket | null = null;
+  private wsRetry: number = 0;
+  private refreshTimer: number = -1;
   private store: ConnectionStore = new ConnectionStore();
 
   aboutToAppear(): void {
@@ -44,6 +50,17 @@ struct TasksPage {
     if (this.timer >= 0) {
       clearInterval(this.timer);
       this.timer = -1;
+    }
+    if (this.refreshTimer >= 0) {
+      clearTimeout(this.refreshTimer);
+      this.refreshTimer = -1;
+    }
+    if (this.ws !== null) {
+      try {
+        this.ws.close();
+      } catch (e) {
+      }
+      this.ws = null;
     }
   }
 
@@ -69,7 +86,75 @@ struct TasksPage {
       this.error = '';
     }
     this.tasks = r.tasks;
+    this.token = r.token;
     this.loading = false;
+    if (this.token.length > 0) {
+      this.connectEvents();
+    }
+  }
+
+  /** 订阅 dsh-pocket events.mux（WebSocket），任何会话事件 → 防抖刷新列表（真实时） */
+  private connectEvents(): void {
+    if (this.baseUrl.length === 0 || this.token.length === 0) {
+      return;
+    }
+    if (this.ws !== null) {
+      return;
+    }
+    let rest = this.baseUrl;
+    let proto = 'ws://';
+    if (rest.startsWith('http://')) {
+      rest = rest.substring(7);
+    } else if (rest.startsWith('https://')) {
+      proto = 'wss://';
+      rest = rest.substring(8);
+    } else {
+      return;
+    }
+    const host = rest.split('/')[0];
+    const wsUrl = proto + host + '/api/events.mux?token=' + encodeURIComponent(this.token);
+    const ws = webSocket.createWebSocket();
+    this.ws = ws;
+    ws.on('open', (err: BusinessError, value: Object) => {
+      console.log('[task] events connected');
+      this.wsRetry = 0;
+    });
+    ws.on('message', (err: BusinessError, data: string | ArrayBuffer) => {
+      try {
+        // 任何会话事件都值得刷新一次（防抖 500ms，避免高频事件连刷）
+        this.scheduleRefresh();
+      } catch (e) {
+      }
+    });
+    ws.on('close', (err: BusinessError, value: Object) => {
+      this.ws = null;
+      this.scheduleRefresh();
+      if (this.wsRetry < 3) {
+        this.wsRetry++;
+        setTimeout(() => {
+          this.connectEvents();
+        }, 5000 * this.wsRetry);
+      }
+    });
+    ws.on('error', (err: BusinessError) => {
+      console.log('[task] ws error: %{public}s', err.message);
+    });
+    ws.connect(wsUrl, (err: BusinessError) => {
+      if (err) {
+        console.log('[task] ws connect err: %{public}s', err.message);
+      }
+    });
+  }
+
+  /** 防抖刷新 */
+  private scheduleRefresh(): void {
+    if (this.refreshTimer >= 0) {
+      clearTimeout(this.refreshTimer);
+    }
+    this.refreshTimer = setTimeout(() => {
+      this.refreshTimer = -1;
+      this.reload();
+    }, 500);
   }
 
   private openTask(url: string): void {
