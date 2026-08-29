@@ -119,9 +119,18 @@ const runningMap = new Map();   // sessionId -> true（曾运行）
 const stallMap = new Map();     // sessionId -> {count, notified}
 const sessionMeta = new Map();  // sessionId -> {title, objective}
 let baseline = false;
+let pollFailCount = 0;
 const POLL_MS = 5000;
 const STALL_MS = 120 * 1000;
 const STALL_LIMIT = 5;
+
+/** token 失效(harness 重启/过期) → 清空,下次 poll 重新登录 */
+function invalidateToken() {
+  if (dshToken !== '') {
+    dshToken = '';
+    console.log('[poll] token invalidated, will re-login');
+  }
+}
 
 async function ensureDshToken() {
   if (dshToken) return dshToken;
@@ -153,7 +162,15 @@ async function poll() {
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ type: 'client-request', rpcId: 'push-' + Date.now(), method: 'session.list', payload: {} }),
     });
+    // token 失效(harness 重启/过期)：清空重登,避免一直 poll 失败
+    if (res.status === 401 || res.status === 403) {
+      console.log('[poll] session.list auth failed ' + res.status + ', re-login');
+      pollFailCount = 0;
+      invalidateToken();
+      return;
+    }
     const j = await res.json();
+    pollFailCount = 0;
     const items = j.result?.value?.items || [];
     if (items.length === 0) return;
 
@@ -197,6 +214,12 @@ async function poll() {
     baseline = true;
   } catch (e) {
     console.log('[poll] err', e.message);
+    pollFailCount += 1;
+    if (pollFailCount >= 3) {
+      console.log('[poll] repeated failures, force re-login');
+      pollFailCount = 0;
+      invalidateToken();
+    }
   } finally {
     setTimeout(poll, POLL_MS);
   }
