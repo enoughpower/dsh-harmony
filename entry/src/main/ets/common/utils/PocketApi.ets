@@ -48,6 +48,11 @@ export interface TaskListResult {
   token: string;
 }
 
+export interface ControlResult {
+  ok: boolean;
+  error: string;
+}
+
 /** session.list 响应结构（仅声明用到的字段） */
 interface SessionStats {
   turns?: number;
@@ -318,6 +323,57 @@ export class PocketApi {
       return parsed.result?.value?.archivedSessionIds ?? [];
     } catch (e) {
       return [];
+    } finally {
+      try {
+        request.destroy();
+      } catch (e) {
+      }
+    }
+  }
+
+  /** 会话控制（goal.pause/resume/complete 或 session.cancel）。内部自动登录取 token。 */
+  static async controlSession(base: string, pin: string, method: string, sessionId: string): Promise<ControlResult> {
+    const b = base.replace(/\/+$/, '');
+    let token = '';
+    try {
+      const ck = webview.WebCookieManager.fetchCookieSync(b);
+      const m = ck.match(/dsh_pocket_token=([^;]+)/);
+      if (m !== null && m.length > 1) {
+        token = m[1].trim();
+      }
+    } catch (e) {
+    }
+    if (token.length === 0) {
+      const login = await PocketApi.login(b, pin);
+      if (!login.ok || login.token.length === 0) {
+        return { ok: false, error: '未登录且登录失败: ' + login.detail };
+      }
+      token = login.token;
+    }
+    const request = http.createHttp();
+    const body: ClientRequestMsg = {
+      'type': 'client-request',
+      'rpcId': 'dsh-harmony-ctrl',
+      'method': method,
+      'payload': { 'sessionId': sessionId }
+    };
+    try {
+      const resp = await request.request(b + '/api/' + method + '?token=' + encodeURIComponent(token), {
+        method: http.RequestMethod.POST,
+        header: { 'Content-Type': 'application/json' },
+        extraData: JSON.stringify(body),
+        connectTimeout: 8000,
+        readTimeout: 12000
+      });
+      if (resp.responseCode === 200) {
+        return { ok: true, error: '' };
+      }
+      if (resp.responseCode === 401 || resp.responseCode === 403) {
+        PocketApi.expectedToken = '';
+      }
+      return { ok: false, error: '服务返回 HTTP ' + String(resp.responseCode ?? 0) };
+    } catch (e) {
+      return { ok: false, error: '请求异常: ' + (e as Error).message.slice(0, 60) };
     } finally {
       try {
         request.destroy();

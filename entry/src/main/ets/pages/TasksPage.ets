@@ -1,4 +1,4 @@
-import { router } from '@kit.ArkUI';
+import { router, promptAction } from '@kit.ArkUI';
 import { common } from '@kit.AbilityKit';
 import { ConnectionStore } from '../common/store/ConnectionStore';
 import { AppPrefs } from '../common/store/AppPrefs';
@@ -142,6 +142,19 @@ struct TasksPage {
           .textOverflow({ overflow: TextOverflow.Ellipsis })
           .alignSelf(ItemAlign.Start)
       }
+
+      Row({ space: 8 }) {
+        if (t.running) {
+          this.CtrlButton('⏸ 暂停', '#E5484D', () => { this.confirmControl(t, 'goal.pause', '暂停'); })
+          this.CtrlButton('⏹ 停止', '#E5484D', () => { this.confirmControl(t, 'session.cancel', '停止'); })
+        } else if (t.phase === 'paused') {
+          this.CtrlButton('▶ 继续', '#4E6EF2', () => { this.confirmControl(t, 'goal.resume', '继续'); })
+        } else if (t.phase !== 'complete') {
+          this.CtrlButton('▶ 继续', '#4E6EF2', () => { this.confirmControl(t, 'goal.resume', '继续'); })
+          this.CtrlButton('✓ 完成', '#34C759', () => { this.confirmControl(t, 'goal.complete', '完成'); })
+        }
+      }
+      .width('100%')
     }
     .width('100%')
     .padding(16)
@@ -165,6 +178,46 @@ struct TasksPage {
     }
     .width('100%')
     .padding({ top: 48, bottom: 48 })
+  }
+
+  @Builder
+  CtrlButton(label: string, color: string, action: () => void) {
+    Button(label)
+      .height(30)
+      .fontSize(13)
+      .fontColor('#FFFFFF')
+      .backgroundColor(color)
+      .onClick(() => {
+        action();
+      })
+  }
+
+  private confirmControl(t: TaskInfo, method: string, label: string): void {
+    promptAction.showDialog({
+      title: label,
+      message: '确定要' + label + '「' + (t.title.length > 0 ? t.title : '该会话') + '」吗？',
+      buttons: [
+        { text: '取消', color: '#666666' },
+        { text: '确定', color: '#E5484D' }
+      ]
+    }).then((res) => {
+      if (res.index === 1) {
+        this.control(t, method, label);
+      }
+    }).catch(() => {
+    });
+  }
+
+  private async control(t: TaskInfo, method: string, label: string): Promise<void> {
+    const ctx = this.getUIContext().getHostContext() as common.UIAbilityContext;
+    const pin = await AppPrefs.getString(ctx, AppPrefs.KEY_LAN_PIN, AppPrefs.DEFAULT_LAN_PIN);
+    const r = await PocketApi.controlSession(this.baseUrl, pin, method, t.sessionId);
+    if (r.ok) {
+      promptAction.showToast({ message: '已' + label });
+      this.reload();
+    } else {
+      promptAction.showToast({ message: label + '失败: ' + r.error });
+    }
   }
 
   private statusLabel(t: TaskInfo): string {
