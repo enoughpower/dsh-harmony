@@ -289,6 +289,17 @@ export class PocketApi {
     return PocketApi.querySession(b, token);
   }
 
+  /** 按 sessionId 获取单个会话最新 TaskInfo。 */
+  static async getSession(base: string, pin: string, sessionId: string): Promise<TaskInfo | null> {
+    const r = await PocketApi.listSessions(base, pin);
+    for (const t of r.tasks) {
+      if (t.sessionId === sessionId) {
+        return t;
+      }
+    }
+    return null;
+  }
+
   /** 查询会话任务列表（session.list 全部项转 TaskInfo） */
   static async listSessions(base: string, pin: string): Promise<TaskListResult> {
     const b = base.replace(/\/+$/, '');

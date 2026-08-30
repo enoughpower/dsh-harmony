@@ -31,6 +31,7 @@ struct SessionDetailPage {
   @State draft: string = '';
   @State sending: boolean = false;
   @State statusBarH: number = 28;
+  private timer: number = -1;
   private store: ConnectionStore = new ConnectionStore();
 
   aboutToAppear(): void {
@@ -49,13 +50,44 @@ struct SessionDetailPage {
     this.updatedAt = parseInt(params?.['updatedAt'] ?? '0', 10);
     this.baseUrl = params?.['url'] ?? '';
     this.loadHistory();
+    if (this.timer < 0) {
+      this.timer = setInterval(() => {
+        this.refresh();
+      }, 3000);
+    }
   }
 
-  private async loadHistory(): Promise<void> {
+  aboutToDisappear(): void {
+    if (this.timer >= 0) {
+      clearInterval(this.timer);
+      this.timer = -1;
+    }
+  }
+
+  /** 定时刷新：更新会话进度/目标/状态 + 消息，实现近实时 */
+  private async refresh(): Promise<void> {
+    const ctx = this.getUIContext().getHostContext() as common.UIAbilityContext;
+    const pin = await AppPrefs.getString(ctx, AppPrefs.KEY_LAN_PIN, AppPrefs.DEFAULT_LAN_PIN);
+    const t = await PocketApi.getSession(this.baseUrl, pin, this.sessionId);
+    if (t !== null) {
+      this.title = t.title;
+      this.objective = t.objective;
+      this.phase = t.phase;
+      this.running = t.running;
+      this.turns = t.turns;
+      this.steps = t.steps;
+      this.updatedAt = t.updatedAt;
+    }
+    this.loadHistory(false);
+  }
+
+  private async loadHistory(showSpinner: boolean = true): Promise<void> {
     if (this.sessionId.length === 0 || this.baseUrl.length === 0) {
       return;
     }
-    this.loadingMsg = true;
+    if (showSpinner) {
+      this.loadingMsg = true;
+    }
     const ctx = this.getUIContext().getHostContext() as common.UIAbilityContext;
     const pin = await AppPrefs.getString(ctx, AppPrefs.KEY_LAN_PIN, AppPrefs.DEFAULT_LAN_PIN);
     const r = await PocketApi.sessionHistory(this.baseUrl, pin, this.sessionId, 12);
