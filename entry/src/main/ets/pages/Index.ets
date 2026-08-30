@@ -231,6 +231,8 @@ struct Index {
         PushToken.ensureAndReport(ctx).catch(() => {
         });
       }
+      // 刷新首页连接卡片(内网IP/公网隧道)，立即反映最新连接地址
+      this.reloadHistory();
     }).catch((e: BusinessError) => {
       hilog.warn(DOMAIN, TAG, 'save connection failed: %{public}s', e.message);
     });
