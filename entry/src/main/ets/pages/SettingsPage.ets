@@ -10,6 +10,7 @@ import { AppPrefs } from '../common/store/AppPrefs';
 import { BackButton } from '../components/BackButton';
 import { LanDiscovery, DiscoveredService } from '../common/utils/LanDiscovery';
 import { ConnectionCard } from '../components/ConnectionCard';
+import { UrlInputDialog } from '../components/UrlInputDialog';
 import { UrlUtils } from '../common/utils/UrlUtils';
 import { ConnectionProfile } from '../model/ConnectionProfile';
 import { WindowBar } from '../common/utils/WindowBar';
@@ -33,6 +34,15 @@ struct SettingsPage {
   @State statusBarH: number = 28;
   @State bottomBarH: number = 0;
   private store: ConnectionStore = new ConnectionStore();
+  private addressDlg: CustomDialogController = new CustomDialogController({
+    builder: UrlInputDialog({
+      onConfirm: (url: string) => {
+        this.connectTo(url);
+      }
+    }),
+    autoCancel: true,
+    alignment: DialogAlignment.Center
+  });
 
   aboutToAppear(): void {
     this.loadVersion();
@@ -247,7 +257,7 @@ struct SettingsPage {
             router.pushUrl({ url: 'pages/HistoryPage' });
           })
           Row() {
-            Text('自动连接最近的 IP')
+            Text('自动启动控制台')
               .fontSize(15)
               .fontColor($r('app.color.text_primary'))
               .layoutWeight(1)
@@ -283,6 +293,22 @@ struct SettingsPage {
           .height(52)
           .padding({ left: 16, right: 16 })
           .backgroundColor($r('app.color.card_background'))
+          Row() {
+            Text('输入电脑端地址')
+              .fontSize(15)
+              .fontColor($r('app.color.text_primary'))
+              .layoutWeight(1)
+            Text('›')
+              .fontSize(18)
+              .fontColor($r('app.color.text_secondary'))
+          }
+          .width('100%')
+          .height(52)
+          .padding({ left: 16, right: 16 })
+          .backgroundColor($r('app.color.card_background'))
+          .onClick(() => {
+            this.addressDlg.open();
+          })
           Row({ space: 12 }) {
             Text('局域网 PIN')
               .fontSize(15)

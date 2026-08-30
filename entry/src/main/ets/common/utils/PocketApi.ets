@@ -22,11 +22,14 @@ export interface SessionQueryResult {
 
 /** 最新会话摘要（DSH session.list items[0] 的轻量投影） */
 export interface LatestSessionInfo {
+  sessionId: string;
   title: string;
   updatedAt: number;
   running: boolean;
   turns: number;
   steps: number;
+  phase: string;
+  objective: string;
 }
 
 /** 任务列表项（session.list 全量投影） */
@@ -53,9 +56,16 @@ export interface ControlResult {
   error: string;
 }
 
+export interface SessionImage {
+  attachmentId: string;
+  mediaType: string;
+  name: string;
+}
+
 export interface SessionMessage {
   role: string;
   text: string;
+  images: SessionImage[];
 }
 
 export interface SessionHistoryResult {
@@ -63,14 +73,30 @@ export interface SessionHistoryResult {
   error: string;
 }
 
-interface PromptContentPart {
-  type: string;
-  text: string;
+export interface AttachmentResult {
+  ok: boolean;
+  data: string;
+  mediaType: string;
+  error: string;
 }
 
+export interface PromptContentPart {
+  type: string;
+  text?: string;
+  mediaType?: string;
+  data?: string;
+  name?: string;
+}
+
+interface HistoryMsgAttachment {
+  attachmentId?: string;
+  mediaType?: string;
+  name?: string;
+}
 interface HistoryMsgTextPart {
   type?: string;
   text?: string;
+  attachment?: HistoryMsgAttachment;
 }
 interface HistoryMsg {
   role?: string;
@@ -78,6 +104,8 @@ interface HistoryMsg {
 }
 interface HistoryMsgData {
   message?: HistoryMsg;
+  role?: string;
+  content?: HistoryMsgTextPart[] | string;
 }
 interface HistoryEvent {
   type?: string;
@@ -287,6 +315,21 @@ export class PocketApi {
       token = login.token;
     }
     return PocketApi.querySession(b, token);
+  }
+
+  /** 获取当前可用的 dsh-pocket 令牌（优先 Web 组件 Cookie，兜底 PIN 登录），供 WS 订阅等使用。 */
+  static async getToken(base: string, pin: string): Promise<string> {
+    const b = base.replace(/\/+$/, '');
+    try {
+      const ck = webview.WebCookieManager.fetchCookieSync(b);
+      const m = ck.match(/dsh_pocket_token=([^;]+)/);
+      if (m !== null && m.length > 1) {
+        return m[1].trim();
+      }
+    } catch (e) {
+    }
+    const login = await PocketApi.login(b, pin);
+    return login.ok ? login.token : '';
   }
 
   /** 按 sessionId 获取单个会话最新 TaskInfo。 */
@@ -515,24 +558,36 @@ export class PocketApi {
         if (e === undefined) {
           continue;
         }
-        if (e.type === 'assistant/message' || e.type === 'message' || e.type === 'user/message' || e.type === 'user/prompt' || e.type === 'user/transcription') {
-          const m = e.data?.message;
-          if (m !== undefined) {
-            const role = m.role ?? '';
+        // 只取真正的用户消息（user/message，输入框内容）与助手消息（assistant/message），
+        // 不把 assistant/chunk（流式片段）、tool/result、user/prompt、user/transcription 当会话消息。
+        if (e.type === 'user/message' || e.type === 'assistant/message') {
+          // assistant/message 的消息体在 data.message；user/message 的消息体（role+content）直接在 data 上
+          const data: HistoryMsgData | undefined = e.data;
+          if (data !== undefined) {
+            const nested = data.message !== undefined;
+            const role = (nested ? data.message?.role : data.role) ?? '';
+            const content = nested ? data.message?.content : data.content;
             let contentText = '';
-            if (typeof m.content === 'string') {
-              contentText = m.content;
-            } else if (Array.isArray(m.content)) {
+            const images: SessionImage[] = [];
+            if (typeof content === 'string') {
+              contentText = content;
+            } else if (Array.isArray(content)) {
               const parts: string[] = [];
-              for (const p of m.content) {
+              for (const p of content) {
                 if (p !== undefined && p.type === 'text' && typeof p.text === 'string') {
                   parts.push(p.text);
+                } else if (p !== undefined && p.type === 'image' && p.attachment !== undefined) {
+                  const att = p.attachment;
+                  const aid = att.attachmentId ?? '';
+                  if (aid.length > 0) {
+                    images.push({ 'attachmentId': aid, 'mediaType': att.mediaType ?? '', 'name': att.name ?? '' });
+                  }
                 }
               }
               contentText = parts.join(' ').trim();
             }
-            if (contentText.length > 0) {
-              messages.push({ role: role, text: contentText });
+            if (contentText.length > 0 || images.length > 0) {
+              messages.push({ role: role, text: contentText, images: images });
             }
           }
         }
@@ -549,7 +604,7 @@ export class PocketApi {
   }
 
   /** 向会话发送一条文本消息（session.prompt）。 */
-  static async promptSession(base: string, pin: string, sessionId: string, text: string): Promise<ControlResult> {
+  static async promptSession(base: string, pin: string, sessionId: string, content: PromptContentPart[]): Promise<ControlResult> {
     const b = base.replace(/\/+$/, '');
     let token = '';
     try {
@@ -567,8 +622,6 @@ export class PocketApi {
       }
       token = login.token;
     }
-    const part: PromptContentPart = { 'type': 'text', 'text': text };
-    const content: PromptContentPart[] = [part];
     const request = http.createHttp();
     const body: ClientRequestMsg = {
       'type': 'client-request',
@@ -597,6 +650,67 @@ export class PocketApi {
       return { ok: false, error: '服务返回 HTTP ' + String(resp.responseCode ?? 0) };
     } catch (e) {
       return { ok: false, error: '请求异常: ' + (e as Error).message.slice(0, 60) };
+    } finally {
+      try {
+        request.destroy();
+      } catch (e) {
+      }
+    }
+  }
+
+  /** 按 attachmentId 拉取消息中的图片（session.attachment），返回 base64 data。 */
+  static async fetchSessionAttachment(base: string, pin: string, sessionId: string, attachmentId: string): Promise<AttachmentResult> {
+    const b = base.replace(/\/+$/, '');
+    let token = '';
+    try {
+      const ck = webview.WebCookieManager.fetchCookieSync(b);
+      const m = ck.match(/dsh_pocket_token=([^;]+)/);
+      if (m !== null && m.length > 1) {
+        token = m[1].trim();
+      }
+    } catch (e) {
+    }
+    if (token.length === 0) {
+      const login = await PocketApi.login(b, pin);
+      if (!login.ok || login.token.length === 0) {
+        return { ok: false, data: '', mediaType: '', error: '未登录且登录失败: ' + login.detail };
+      }
+      token = login.token;
+    }
+    const request = http.createHttp();
+    const body: ClientRequestMsg = {
+      'type': 'client-request',
+      'rpcId': 'dsh-harmony-attachment',
+      'method': 'session.attachment',
+      'payload': {
+        'sessionId': sessionId,
+        'attachmentId': attachmentId
+      }
+    };
+    try {
+      const resp = await request.request(b + '/api/session.attachment?token=' + encodeURIComponent(token), {
+        method: http.RequestMethod.POST,
+        header: { 'Content-Type': 'application/json' },
+        extraData: JSON.stringify(body),
+        connectTimeout: 8000,
+        readTimeout: 30000
+      });
+      if (resp.responseCode !== 200) {
+        if (resp.responseCode === 401 || resp.responseCode === 403) {
+          PocketApi.expectedToken = '';
+        }
+        return { ok: false, data: '', mediaType: '', error: '服务返回 HTTP ' + String(resp.responseCode ?? 0) };
+      }
+      const parsed = JSON.parse(String(resp.result ?? '')) as Record<string, Object>;
+      const inner = parsed['result'] as Record<string, Object> | undefined;
+      const value = inner?.['value'] as Record<string, Object> | undefined;
+      const d = value?.['data'];
+      const att = value?.['attachment'] as Record<string, Object> | undefined;
+      const media = att?.['mediaType'];
+      const dataStr = typeof d === 'string' ? d : '';
+      return { ok: dataStr.length > 0, data: dataStr, mediaType: typeof media === 'string' ? media : '', error: dataStr.length > 0 ? '' : '图片数据为空' };
+    } catch (e) {
+      return { ok: false, data: '', mediaType: '', error: '请求异常: ' + (e as Error).message.slice(0, 60) };
     } finally {
       try {
         request.destroy();
@@ -707,11 +821,14 @@ export class PocketApi {
   private static project(item: SessionItem): LatestSessionInfo {
     const stats = item.projections?.values?.sessionStats;
     return {
+      sessionId: item.sessionId ?? '',
       title: item.projections?.values?.title ?? '',
       updatedAt: item.updatedAt ?? 0,
       running: item.running === true,
       turns: stats?.turns ?? 0,
-      steps: stats?.steps ?? 0
+      steps: stats?.steps ?? 0,
+      phase: item.projections?.values?.goal?.goal?.phase ?? '',
+      objective: item.projections?.values?.goal?.goal?.objective ?? ''
     };
   }
 }

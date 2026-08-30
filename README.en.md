@@ -8,8 +8,10 @@ A **native HarmonyOS client for DeepSeek Harness**, designed to work with the [d
 ## Features
 
 - 📷 **Scan to connect**: custom immersive scanner (transparent status bar, WeChat-style gradient scan line, glass ×/flash buttons); scan → validate → open ArkWeb
-- 🧭 **Connection history**: deduped by IP, newest first, swipe-to-delete, tap to open; home keeps the latest entry; manual URL input supported
-- ⚡ **Auto-connect**: with the setting on, each app launch auto-connects the most recent IP (no scan needed)
+- 🧭 **Connection history**: deduped by IP, newest first, swipe-to-delete, tap to open; manual URL input lives in Settings
+- ⚡ **Auto-start console**: with the setting on, each app launch enters the console via the resolved available connection (LAN direct IP → public tunnel); if none works the home shows a persistent notice and offers to add one
+- 💬 **Native session detail page**: from Latest session / Session list / widget — Markdown-rendered chat, message images, image sending, controls (pause/resume/stop/complete), a "thinking…" indicator and near-real-time refresh
+- 🔀 **Auto connection switch**: the phone probes the LAN direct IP and the public tunnel and switches to whichever is reachable when the network changes (console / detail follow); when neither is reachable the home shows a persistent notice
 - 📥 **Export auto-save**: session-log exports land in the phone's Downloads automatically (zero dialogs; under Downloads/com.dsh.lite/)
 - ⚡ **Latest session at a glance**: home card and desktop widget show the latest session (title / running / turns / steps / relative time; title wraps, tap to refresh)
 - 🖼 **Album image injection**: floating glass button → pick from album → auto-converted to JPEG and injected into the DSH composer (any phone format, chat with images directly)

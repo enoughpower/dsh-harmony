@@ -29,6 +29,10 @@
       "value": "#FFFFFF"
     },
     {
+      "name": "user_bubble_background",
+      "value": "#ECF0FF"
+    },
+    {
       "name": "divider",
       "value": "#EDEFF3"
     },

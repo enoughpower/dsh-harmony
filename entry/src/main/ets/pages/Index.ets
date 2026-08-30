@@ -8,14 +8,12 @@ import { BusinessError } from '@kit.BasicServicesKit';
 import { ConnectionProfile } from '../model/ConnectionProfile';
 import { ConnectionStore } from '../common/store/ConnectionStore';
 import { UrlUtils } from '../common/utils/UrlUtils';
-import { ConnectionCard } from '../components/ConnectionCard';
-import { UrlInputDialog } from '../components/UrlInputDialog';
 import { CardSync } from '../common/store/CardSync';
 import { AppPrefs } from '../common/store/AppPrefs';
 import { WindowBar } from '../common/utils/WindowBar';
 import { PushToken } from '../common/store/PushToken';
 import { PocketApi, LatestSessionInfo, SessionQueryResult } from '../common/utils/PocketApi';
-import { http } from '@kit.NetworkKit';
+import { http, connection } from '@kit.NetworkKit';
 import { notificationManager } from '@kit.NotificationKit';
 import { WebShellView } from '../components/WebShellView';
 import { SettingsView } from '../components/SettingsView';
@@ -53,33 +51,30 @@ struct Index {
   @State collapsed: boolean = false;
   /** 当前 Web 连接地址 */
   @State webUrl: string = '';
+  /** 最近一次加载最新会话所用的连接基址（供详情页 API 使用） */
+  @State activeBase: string = '';
+  /** 解析出的“当前可用”连接地址（自动切换：局域网直连 -> 公网隧道）；共享给控制台页做响应式切换 */
+  @StorageLink('activeConnUrl') activeConnUrl: string = '';
+  /** 内网直连与公网隧道都不可用（首页常驻提示） */
+  @State connFailed: boolean = false;
   /** 左栏导航栈：home / settings / history */
   @State leftStack: string[] = ['home'];
   private pushTimer: number = -1;
   private sessionTimer: number = -1;
+  private connTimer: number = -1;
+  private netConn: connection.NetConnection | null = null;
   private store: ConnectionStore = new ConnectionStore();
   /** 会话内是否已自动连接过（防止 WebShell 返回时重复拉/自动拉回） */
   private autoConnected: boolean = false;
   /** 开关配置是否已读取完成（避免异步竞态导致未读到的默认值参与判定） */
   private autoConnectReady: boolean = false;
-  private dialogController: CustomDialogController = new CustomDialogController({
-    builder: UrlInputDialog({
-      onConfirm: (url: string) => {
-        this.openUrl(url);
-      }
-    }),
-    autoCancel: true,
-    alignment: DialogAlignment.Center
-  });
-
   aboutToAppear(): void {
     this.reloadHistory();
     const ctx = this.getUIContext().getHostContext() as common.UIAbilityContext;
     AppPrefs.getBool(ctx, AppPrefs.KEY_AUTO_CONNECT, true).then((v: boolean) => {
       this.autoConnectEnabled = v;
       this.autoConnectReady = true;
-      // 配置就绪后再判定（onPageShow 可能早于此完成）
-      this.maybeAutoConnect();
+      // 自动启动控制台由 resolveConnection 完成后触发（此处 activeConnUrl 尚未确定）
     });
   }
 
@@ -111,6 +106,9 @@ struct Index {
       this.ensureNotifyPermission();
     }
     this.reloadHistory();
+    // 自动切换可用连接（局域网直连 -> 公网隧道），并监听网络变化
+    this.setupNetListener();
+    this.resolveConnection();
     // 沉浸式系统栏兜底：幂等重设（冷启动/时序问题/去其他页面后回首页都保证正确），并实测状态栏高度
     const barCtx = this.getUIContext().getHostContext() as common.UIAbilityContext;
     WindowBar.immersive(barCtx).catch(() => {
@@ -144,15 +142,14 @@ struct Index {
         this.refreshSession();
       }, 30000);
     }
-    // 服务卡片点击直达：消费 pendingDshUrl 并跳转 WebShell
+    // 服务卡片点击：默认进"原生会话详情页"（该连接的最新会话）；打不开则默认进首页
     const pending = AppStorage.get<string>('pendingDshUrl');
     if (pending !== undefined && pending !== null && pending.length > 0) {
       AppStorage.setOrCreate('pendingDshUrl', '');
-      this.openUrl(pending);
+      this.openCardSessionDetail(pending);
       return;
     }
-    // 进入 App 自动连接最近使用的 IP（开关开启时；会话内一次）
-    this.maybeAutoConnect();
+    // 自动启动控制台：由 resolveConnection() 在确定可用连接后触发
   }
 
   onPageHide(): void {
@@ -164,17 +161,44 @@ struct Index {
       clearInterval(this.sessionTimer);
       this.sessionTimer = -1;
     }
+    if (this.connTimer >= 0) {
+      clearTimeout(this.connTimer);
+      this.connTimer = -1;
+    }
+    // 不在此注销网络监听：控制台页在栈顶时仍需感知网络切换并自动切换连接
   }
 
-  /** 自动连接判定：开关已读取、开关为开、会话内未连接过、且有历史记录时执行 */
+  /** 自动启动控制台：使用解析出的可用连接；无可用地址时提示用户添加。 */
   private maybeAutoConnect(): void {
     if (!this.autoConnectReady || !this.autoConnectEnabled || this.autoConnected) {
       return;
     }
     this.autoConnected = true;
-    this.store.loadAll(this.getUIContext().getHostContext() as common.UIAbilityContext).then((list: ConnectionProfile[]) => {
-      if (list.length > 0) {
-        this.openUrl(list[0].url);
+    if (this.activeConnUrl.length > 0) {
+      // 有可用连接 -> 自动启动控制台
+      this.openUrl(this.activeConnUrl);
+    } else {
+      // 没有可用的地址 -> 提示用户添加
+      this.promptAddConnection();
+    }
+  }
+
+  /** 无可用连接地址时，提示用户去添加（扫码/输入地址）。 */
+  private promptAddConnection(): void {
+    promptAction.showDialog({
+      title: '添加连接',
+      message: '没有可用的连接地址，无法启动控制台。请扫码，或在设置中输入电脑端地址。',
+      buttons: [
+        { text: '取消', color: '#666666' },
+        { text: '去添加', color: '#4D6BFE' }
+      ]
+    }).then((res) => {
+      if (res.index === 1) {
+        if (this.wide) {
+          this.pushLeft('settings');
+        } else {
+          router.pushUrl({ url: 'pages/SettingsPage' });
+        }
       }
     }).catch(() => {
     });
@@ -218,6 +242,9 @@ struct Index {
       hilog.warn(DOMAIN, TAG, 'invalid url rejected: %{public}s', raw);
       return;
     }
+    this.activeConnUrl = url;
+    this.connFailed = false;
+    this.autoConnected = true;
     const ctx = this.getUIContext().getHostContext() as common.UIAbilityContext;
     const profile = new ConnectionProfile(url, UrlUtils.display(url, 32));
     this.store.upsert(ctx, profile).then(() => {
@@ -310,6 +337,123 @@ struct Index {
     });
   }
 
+  /** 设置网络变化监听：网络切换/断开时自动重新解析可用连接。 */
+  private setupNetListener(): void {
+    if (this.netConn !== null) {
+      return;
+    }
+    try {
+      const nc = connection.createNetConnection();
+      this.netConn = nc;
+      nc.on('netAvailable', () => {
+        this.scheduleResolve();
+      });
+      nc.on('netLost', () => {
+        this.scheduleResolve();
+      });
+      nc.on('netCapabilitiesChange', () => {
+        this.scheduleResolve();
+      });
+      nc.register((err: BusinessError) => {
+        if (err) {
+          hilog.warn(DOMAIN, TAG, 'net register failed: %{public}s', err.message);
+        }
+      });
+    } catch (e) {
+      this.netConn = null;
+    }
+  }
+
+  private teardownNetListener(): void {
+    if (this.netConn !== null) {
+      try {
+        this.netConn.unregister((err: BusinessError) => {
+        });
+      } catch (e) {
+      }
+      this.netConn = null;
+    }
+  }
+
+  /** 防抖重新解析（网络抖动时避免连发探测）。 */
+  private scheduleResolve(): void {
+    if (this.connTimer >= 0) {
+      clearTimeout(this.connTimer);
+    }
+    this.connTimer = setTimeout(() => {
+      this.connTimer = -1;
+      this.resolveConnection();
+    }, 800);
+  }
+
+  /** 自动选择可用连接：优先“局域网 IP 直连”，不可达则用“公网隧道”，都不通则标记失败。 */
+  private async resolveConnection(): Promise<void> {
+    const ctx = this.getUIContext().getHostContext() as common.UIAbilityContext;
+    let list: ConnectionProfile[] = [];
+    try {
+      list = await this.store.loadAll(ctx);
+    } catch (e) {
+      return;
+    }
+    if (list.length === 0) {
+      this.activeConnUrl = '';
+      this.connFailed = false;
+      return;
+    }
+    // 候选顺序：局域网 IP（最近优先）-> 公网隧道（最近优先），去重
+    const candidates: string[] = [];
+    for (const p of list) {
+      if (UrlUtils.isIpHost(p.url) && candidates.indexOf(p.url) < 0) {
+        candidates.push(p.url);
+      }
+    }
+    for (const p of list) {
+      if (UrlUtils.isTunnelHost(p.url) && candidates.indexOf(p.url) < 0) {
+        candidates.push(p.url);
+      }
+    }
+    for (const url of candidates) {
+      const ok = await this.checkReachable(url);
+      if (ok) {
+        this.activeConnUrl = url;
+        this.connFailed = false;
+        if (this.wide) {
+          // 平板/宽屏：控制台内嵌在右侧，直接切换其地址实现自动重连
+          this.webUrl = url;
+        }
+        this.refreshSession();
+        this.reloadHistory();
+        this.maybeAutoConnect();
+        return;
+      }
+    }
+    this.activeConnUrl = '';
+    this.connFailed = true;
+    this.refreshSession();
+    this.maybeAutoConnect();
+  }
+
+  /** 探测一个 dsh-pocket 连接是否可达（GET /api/status，3s 超时；2xx/3xx/4xx 视为可达）。 */
+  private checkReachable(url: string): Promise<boolean> {
+    return new Promise<boolean>((resolve: (ok: boolean) => void) => {
+      const req = http.createHttp();
+      const options: http.HttpRequestOptions = {
+        'method': http.RequestMethod.GET,
+        'connectTimeout': 3000,
+        'readTimeout': 3000,
+        'expectDataType': http.HttpDataType.STRING
+      };
+      req.request(url.replace(/\/+$/, '') + '/api/status', options).then((resp: http.HttpResponse) => {
+        const code = resp.responseCode ?? 0;
+        resolve(code >= 200 && code < 500);
+      }).catch(() => {
+        resolve(false);
+      }).finally(() => {
+        req.destroy();
+      });
+    });
+  }
+
   /** 拉取最新会话（首页展示；LAN PIN 登录 + session.list） */
   /** 追加调试日志到沙箱文件（pocket-debug.log，hdc 可读） */
   private logDebug(context: common.Context, msg: string): void {
@@ -351,10 +495,12 @@ struct Index {
         this.logDebug(ctx, 'no history, skip');
         return;
       }
-      this.logDebug(ctx, 'target url=' + list[0].url);
+      const base = this.activeConnUrl.length > 0 ? this.activeConnUrl : list[0].url;
+      this.logDebug(ctx, 'target url=' + base);
+      this.activeBase = base;
       AppPrefs.getString(ctx, AppPrefs.KEY_LAN_PIN, AppPrefs.DEFAULT_LAN_PIN).then((pin: string) => {
         this.logDebug(ctx, 'pin=' + pin);
-        return PocketApi.latestSession(list[0].url, pin);
+        return PocketApi.latestSession(base, pin);
       }).catch(() => {
         const fb: SessionQueryResult = { info: null, error: 'PocketApi 异常', token: '' };
         return fb;
@@ -429,6 +575,65 @@ struct Index {
     });
   }
 
+  /** 打开最新会话的详情页。 */
+  private openLatestSessionDetail(): void {
+    const ls = this.latestSession;
+    if (ls === null) {
+      promptAction.showToast({ message: '暂无最新会话' });
+      return;
+    }
+    const base = this.activeBase.length > 0 ? this.activeBase : this.webUrl;
+    if (base.length === 0) {
+      promptAction.showToast({ message: '请先连接电脑端' });
+      return;
+    }
+    router.pushUrl({
+      url: 'pages/SessionDetailPage',
+      params: {
+        'sessionId': ls.sessionId,
+        'title': ls.title,
+        'objective': ls.objective,
+        'phase': ls.phase,
+        'running': String(ls.running),
+        'turns': String(ls.turns),
+        'steps': String(ls.steps),
+        'updatedAt': String(ls.updatedAt),
+        'url': base
+      }
+    });
+  }
+
+  /** 服务卡片点击：默认进"原生会话详情页"（该连接的最近会话）；拿不到会话则留在首页。 */
+  private async openCardSessionDetail(url: string): Promise<void> {
+    this.activeConnUrl = url;
+    const ctx = this.getUIContext().getHostContext() as common.UIAbilityContext;
+    try {
+      const pin = await AppPrefs.getString(ctx, AppPrefs.KEY_LAN_PIN, AppPrefs.DEFAULT_LAN_PIN);
+      const q = await PocketApi.latestSession(url, pin);
+      const ls = q.info;
+      if (ls !== null && ls.sessionId.length > 0) {
+        this.activeBase = url;
+        router.pushUrl({
+          url: 'pages/SessionDetailPage',
+          params: {
+            'sessionId': ls.sessionId,
+            'title': ls.title,
+            'objective': ls.objective,
+            'phase': ls.phase,
+            'running': String(ls.running),
+            'turns': String(ls.turns),
+            'steps': String(ls.steps),
+            'updatedAt': String(ls.updatedAt),
+            'url': url
+          }
+        });
+        return;
+      }
+    } catch (e) {
+    }
+    // 打不开：留在首页（默认）
+  }
+
   @Builder
   Header() {
     Row() {
@@ -446,23 +651,38 @@ struct Index {
       .layoutWeight(1)
       .alignItems(HorizontalAlign.Start)
 
-      Button() {
-        SymbolGlyph($r('sys.symbol.gearshape'))
-          .fontSize(22)
-          .fontColor([$r('app.color.text_primary')])
-      }
-      .width(40)
-      .height(40)
-      .borderRadius(20)
-      .backgroundColor($r('app.color.button_surface'))
-      .stateEffect(false)
-      .onClick(() => {
-        if (this.wide) {
-          this.pushLeft('settings');
-        } else {
-          router.pushUrl({ url: 'pages/SettingsPage' });
+      Row({ space: 8 }) {
+        Button() {
+          SymbolGlyph($r('sys.symbol.line_viewfinder'))
+            .fontSize(22)
+            .fontColor([$r('app.color.text_primary')])
         }
-      })
+        .width(40)
+        .height(40)
+        .borderRadius(20)
+        .backgroundColor($r('app.color.button_surface'))
+        .stateEffect(false)
+        .onClick(() => {
+          this.scanAndOpen();
+        })
+        Button() {
+          SymbolGlyph($r('sys.symbol.gearshape'))
+            .fontSize(22)
+            .fontColor([$r('app.color.text_primary')])
+        }
+        .width(40)
+        .height(40)
+        .borderRadius(20)
+        .backgroundColor($r('app.color.button_surface'))
+        .stateEffect(false)
+        .onClick(() => {
+          if (this.wide) {
+            this.pushLeft('settings');
+          } else {
+            router.pushUrl({ url: 'pages/SettingsPage' });
+          }
+        })
+      }
     }
     .width('100%')
   }
@@ -545,33 +765,69 @@ struct Index {
     .backgroundColor($r('app.color.card_background'))
     .borderRadius($r('app.float.card_corner_radius'))
     .onClick(() => {
-      router.pushUrl({ url: 'pages/TasksPage' });
+      this.openLatestSessionDetail();
     })
   }
 
   @Builder
-  ActionButtons() {
-    Column({ space: 12 }) {
-      Button('扫码连接')
-        .width('100%')
-        .height(48)
-        .fontSize(16)
+  SessionListCard() {
+    Row({ space: 12 }) {
+      SymbolGlyph($r('sys.symbol.list_bullet'))
+        .fontSize(24)
+        .fontColor([$r('app.color.primary')])
+      Column({ space: 4 }) {
+        Text('会话列表')
+          .fontSize(16)
+          .fontWeight(FontWeight.Medium)
+          .fontColor($r('app.color.text_primary'))
+          .alignSelf(ItemAlign.Start)
+        Text('查看全部会话与进度')
+          .fontSize(12)
+          .fontColor($r('app.color.text_secondary'))
+          .alignSelf(ItemAlign.Start)
+      }
+      .layoutWeight(1)
+      .alignItems(HorizontalAlign.Start)
+      Text('›')
+        .fontSize(20)
         .fontWeight(FontWeight.Medium)
-        .backgroundColor($r('app.color.primary'))
+        .fontColor($r('app.color.text_secondary'))
+    }
+    .width('100%')
+    .padding(16)
+    .backgroundColor($r('app.color.card_background'))
+    .borderRadius($r('app.float.card_corner_radius'))
+    .onClick(() => {
+      router.pushUrl({ url: 'pages/TasksPage' });
+    })
+  }
+
+  /** 内网直连与公网隧道都不可用时，首页常驻提示。 */
+  @Builder
+  ConnFailBanner() {
+    Row({ space: 10 }) {
+      Text('●')
+        .fontSize(12)
+        .fontColor('#F5A623')
+      Text('无法连接电脑端：内网直连与公网隧道都不可用，请检查网络或电脑端服务')
+        .fontSize(13)
+        .fontColor('#8A5A00')
+        .layoutWeight(1)
+        .maxLines(2)
+        .textOverflow({ overflow: TextOverflow.Ellipsis })
+      Button('重试')
+        .height(28)
+        .fontSize(12)
+        .fontColor('#F5A623')
+        .backgroundColor('#FFF3E0')
         .onClick(() => {
-          this.scanAndOpen();
-        })
-      Button('手动输入地址')
-        .width('100%')
-        .height(44)
-        .fontSize(15)
-        .backgroundColor($r('app.color.button_surface'))
-        .fontColor($r('app.color.text_primary'))
-        .onClick(() => {
-          this.dialogController.open();
+          this.resolveConnection();
         })
     }
     .width('100%')
+    .padding(12)
+    .backgroundColor('#FFF8EC')
+    .borderRadius($r('app.float.card_corner_radius'))
   }
 
   @Builder
@@ -714,39 +970,19 @@ struct Index {
     Column({ space: 16 }) {
       this.Header()
 
+      if (this.connFailed) {
+        this.ConnFailBanner()
+      }
+
       if (FeatureFlags.PUSH_ENABLED) {
         this.PushStatusRow()
       }
 
       this.LatestSessionCard()
 
-      if (this.lanConn !== null) {
-        ConnectionCard({
-          profile: this.lanConn!,
-          deleteEnabled: false,
-          tag: '内网 IP',
-          onOpen: (url: string) => {
-            this.openUrl(url);
-          }
-        })
-      }
-      if (this.tunnelConn !== null) {
-        ConnectionCard({
-          profile: this.tunnelConn!,
-          deleteEnabled: false,
-          tag: '公网隧道',
-          onOpen: (url: string) => {
-            this.openUrl(url);
-          }
-        })
-      }
-      if (this.lanConn === null && this.tunnelConn === null) {
-        this.EmptyHistory()
-      }
+      this.SessionListCard()
 
       Blank()
-
-      this.ActionButtons()
     }
     .width('100%')
     .height('100%')

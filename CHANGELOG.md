@@ -1,5 +1,37 @@
 # Changelog
 
+## 2026-08-30
+
+### feat
+- **会话详情页全面增强**（原生详情页，替代只进 WebShell 的单一入口）：
+  - 「对话」展示真实消息：仅取 `user/message`(输入框原文) 与 `assistant/message`，排除 tool / assistant/chunk 噪音；修复用户消息体直接位于 `data` 上导致漏读的问题
+  - **Markdown 渲染**：新增 `common/utils/Markdown.ets` 解析器 + `components/MarkdownText.ets` 渲染组件，支持标题 / 段落 / 代码块 / 列表 / 引用 / 分隔线及行内 **加粗** *斜体* `代码` [链接]；行内代码与代码块**跟随深浅色**
+  - **消息图片显示**：消息含 image 块时用 `session.attachment` 拉取 base64 → PixelMap，气泡内 140×140 缩略图（新增 `fetchSessionAttachment` / `SessionImage` / `AttachmentResult`）
+  - **发送带图**：输入框左侧相机按钮，相册多选(≤9)统一转 JPEG(80) → base64；缩略图左对齐 + 横向滚动、逐张 ✕ 移除；支持纯图 / 图文混合
+  - 进入停在顶部、发送后滚到底；实时刷新「内容变化才重建 + 停在底部才自动跟随」（`MessageDataSource` LazyForEach 数据源 + 内容签名比对 + nearBottom）
+  - 「思考中…」提示（会话 running 时）
+  - AI / 用户消息气泡不同底色（新增 `user_bubble_background`，base / dark）
+  - 键盘避让 RESIZE：弹键盘不遮挡状态栏
+  - 网络切换：详情页跟随共享 `activeConnUrl` 换地址、重连 WebSocket、并**失败时不清空已有消息**
+- **首页重排**：改为两张卡片「最新会话」(点击直达**会话详情页**) + 「会话列表」(点击进任务列表)；右上角 [扫码(取景框+横线)][设置]；移除底部大按钮 / 连接卡片 / 空态（手动输入地址移到设置页）
+- **连接自动切换**：解析出可用连接（局域网直连 → 公网隧道），网络监听(connection) + 手动 / 周期探测；都不通则首页常驻提示、无可用地址时弹窗引导添加
+- 「自动连接最近的 IP」→「**自动启动控制台**」（用解析出的可用连接自动进入控制台）
+- **服务卡片点击 → 原生会话详情页**（该连接最新会话），打不开则留首页（不再进 WebShell）
+- 任务列表移除每张会话卡片上的控制按钮（暂停/继续/停止/完成保留在详情页）
+- 设置页新增「输入电脑端地址」入口（复用手动输入连接地址对话框）
+
+### fix
+- 会话详情页拉取历史失败时不再清空对话
+- 行内代码 / 代码块夜间版配色（白底蓝字 → 深底柔青蓝）
+- 弹键盘不再遮挡状态栏（`KeyboardAvoidMode.RESIZE`）
+- 移除任务列表卡片按钮后清理未使用代码 / 导入
+
+### refactor
+- `PocketApi.promptSession` 改为接受内容数组（文本 + 图片），`PromptContentPart` 支持图片字段
+- `LatestSessionInfo` 补充 `sessionId / phase / objective`（供详情页直达）
+- 消息列表改用 `MessageDataSource`（`IDataSource` LazyForEach）提升滚动流畅度
+- 首页连接探测统一：`resolveConnection` / `checkReachable`，`activeConnUrl` 用 `@StorageLink` 与各页共享
+
 ## 2026-08-25
 
 ### feat

@@ -37,6 +37,7 @@ struct WebShell {
   /** 状态栏高度（沉浸式时进度条下移留白） */
   @State statusBarH: number = 0;
   @StorageLink('osThemeIsDark') @Watch('onThemeChange') osThemeIsDark: boolean = false;
+  @StorageLink('activeConnUrl') @Watch('onActiveConnChange') activeConnUrl: string = '';
   /** 网页实际外观：-1 未知（回退系统主题）/ 0 浅色 / 1 深色（网页内可独立于系统切换） */
   @State webDark: number = -1;
   private themeTimer: number = -1;
@@ -45,6 +46,22 @@ struct WebShell {
   /** 深浅色切换回调：刷新系统栏，与网页主题同步 */
   onThemeChange(): void {
     this.applyWebBar();
+  }
+
+  /** 网络切换后，自动把控制台切到新的可用连接（局域网直连 -> 公网隧道）。 */
+  onActiveConnChange(): void {
+    if (this.url.length === 0 || this.url === 'about:blank') {
+      return;
+    }
+    const norm = UrlUtils.normalize(this.activeConnUrl);
+    if (norm !== null && norm !== this.url) {
+      this.url = norm;
+      this.title = UrlUtils.display(norm, 24);
+      this.loading = true;
+      this.failed = false;
+      this.failText = '';
+      hilog.info(DOMAIN, TAG, 'WebShell auto-switch to: %{public}s', norm);
+    }
   }
 
   /** 状态栏底色条：优先网页实际外观（网页内可独立切深浅），未知时回退系统主题 */
