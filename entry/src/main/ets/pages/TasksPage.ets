@@ -394,7 +394,7 @@ struct TasksPage {
           }
         }, (r: SearchResult) => r.sessionId + r.snippet)
       }
-      .width('100%').layoutWeight(1).scrollBar(BarState.Auto)
+      .width('100%').layoutWeight(1).scrollBar(BarState.Off)
     }
   }
 
@@ -446,7 +446,7 @@ struct TasksPage {
             }
             .width('100%')
             .layoutWeight(1)
-            .scrollBar(BarState.Auto)
+            .scrollBar(BarState.Off)
           }
           .onRefreshing(() => {
             this.onPullRefresh();
