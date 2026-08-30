@@ -37,7 +37,7 @@ function saveTokens() { writeFileSync(TOKEN_FILE, JSON.stringify(pushTokens, nul
 const SETTINGS_FILE = new URL('./settings.json', import.meta.url).pathname;
 let pushSettings = loadSettings();
 function loadSettings() {
-  const def = { pushEnabled: true, sessionEnd: true, interact: true };
+  const def = { pushEnabled: true, sessionEnd: true, interact: true, balance: true, balanceThreshold: Number(process.env.BALANCE_THRESHOLD || 5) };
   if (existsSync(SETTINGS_FILE)) {
     try {
       const saved = JSON.parse(readFileSync(SETTINGS_FILE, 'utf8'));
@@ -287,7 +287,6 @@ function cleanSummary(t) {
 
 // ---- DeepSeek 余额（每 5 分钟查一次 + 低于阈值告警推送） ----
 const BALANCE_INTERVAL = 5 * 60 * 1000;
-const BALANCE_THRESHOLD = Number(process.env.BALANCE_THRESHOLD || 10);
 let lastBalance = null;            // {currency,total,available,fetchedAt}
 let balanceLowNotified = false;
 async function getDeepseekKey() {
@@ -319,11 +318,16 @@ async function refreshBalance() {
       fetchedAt: Date.now(),
     };
     const total = Number(lastBalance.total) || 0;
-    if (total < BALANCE_THRESHOLD && !balanceLowNotified) {
+    if (!pushSettings.balance) {
+      console.log('[balance] disabled by settings');
+      return;
+    }
+    const threshold = Number(pushSettings.balanceThreshold) || 5;
+    if (total < threshold && !balanceLowNotified) {
       balanceLowNotified = true;
       sendCase('💰 DeepSeek 余额不足', '当前余额 ' + lastBalance.total + ' ' + lastBalance.currency
-        + '，已低于 ' + BALANCE_THRESHOLD + '，请及时充值（避免任务中断）', '', 'balance');
-    } else if (total >= BALANCE_THRESHOLD) {
+        + '，已低于 ' + threshold + '，请及时充值（避免任务中断）', '', 'balance');
+    } else if (total >= threshold) {
       balanceLowNotified = false;
     }
     console.log('[balance] updated', JSON.stringify(lastBalance));
@@ -400,6 +404,8 @@ const server = createServer((req, res) => {
         if (typeof p.pushEnabled === 'boolean') pushSettings.pushEnabled = p.pushEnabled;
         if (typeof p.sessionEnd === 'boolean') pushSettings.sessionEnd = p.sessionEnd;
         if (typeof p.interact === 'boolean') pushSettings.interact = p.interact;
+        if (typeof p.balance === 'boolean') pushSettings.balance = p.balance;
+        if (typeof p.threshold === 'number') pushSettings.balanceThreshold = p.threshold;
         saveSettings();
         console.log('[api] push.settings ->', JSON.stringify(pushSettings));
         res.writeHead(200, { 'content-type': 'application/json' });
@@ -432,7 +438,7 @@ const server = createServer((req, res) => {
   }
   if (req.url === '/api/balance') {
     res.writeHead(200, { 'content-type': 'application/json' });
-    res.end(JSON.stringify({ ok: lastBalance !== null, balance: lastBalance, threshold: BALANCE_THRESHOLD }));
+    res.end(JSON.stringify({ ok: lastBalance !== null, balance: lastBalance, threshold: pushSettings.balanceThreshold }));
     return;
   }
   res.writeHead(404); res.end('{}');

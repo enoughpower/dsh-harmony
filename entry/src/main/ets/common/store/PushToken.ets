@@ -26,6 +26,8 @@ interface PushSettingsPayload {
   'pushEnabled': boolean;
   'sessionEnd': boolean;
   'interact': boolean;
+  'balance'?: boolean;
+  'threshold'?: number;
 }
 
 /**
@@ -100,7 +102,10 @@ export class PushToken {
       const enabled = await AppPrefs.getBool(context, AppPrefs.KEY_PUSH_ENABLED, true);
       const sessionEnd = await AppPrefs.getBool(context, AppPrefs.KEY_PUSH_SESSION_END, true);
       const interact = await AppPrefs.getBool(context, AppPrefs.KEY_PUSH_INTERACT, true);
-      const payload: PushSettingsPayload = { 'pushEnabled': enabled, 'sessionEnd': sessionEnd, 'interact': interact };
+      const balance = await AppPrefs.getBool(context, AppPrefs.KEY_PUSH_BALANCE, true);
+      const thresholdStr = await AppPrefs.getString(context, AppPrefs.KEY_PUSH_BALANCE_THRESHOLD, AppPrefs.DEFAULT_PUSH_BALANCE_THRESHOLD);
+      const threshold = Number(thresholdStr) || 5;
+      const payload: PushSettingsPayload = { 'pushEnabled': enabled, 'sessionEnd': sessionEnd, 'interact': interact, 'balance': balance, 'threshold': threshold };
       const body = JSON.stringify({ 'type': 'client-request', 'rpcId': 'push-settings-' + Date.now(), 'method': 'push.settings', 'payload': payload });
       const req = http.createHttp();
       try {

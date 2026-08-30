@@ -22,7 +22,8 @@
 - **通知增强**（push-notify）：①通知点击**直达对应会话详情页**（推送 `data` 带 `sessionId + dshUrl`，App 解析后进原生详情页）②文案/去重：会话结束带目标、per-session 冷却 + 问题/批准按 id 去重 ③稳定性：JWT 鉴权失败强制刷新、无效 token 清理、`/api/status` 增加 `queued/uptime/lastPoll`
 - **移除『长时间无响应』推送**：仅保留「会话结束 + 需信息/需批准」两场景
 - **通知开关**：设置页新增「通知」分组——「启用推送(总开关)」「会话结束提醒」，App 通过 `/api/push.settings` 下发到电脑端推送器(持久化 settings.json)，总开关关则不上报 token
-- **DeepSeek 余额**：电脑端 push-notify 每 5 分钟查 `api.deepseek.com/user/balance`(读本机 `~/.dsh/.credentials.yaml` 的 key)，暴露 `:3082/api/balance`；低于阈值(`BALANCE_THRESHOLD`,默认 10)推送提醒；首页显示余额(局域网可达时)
+- **DeepSeek 余额**：电脑端 push-notify 每 5 分钟查 `api.deepseek.com/user/balance`(读本机 `~/.dsh/.credentials.yaml` 的 key)，暴露 `:3082/api/balance`；低于阈值推送提醒；首页显示余额(局域网可达时)
+- **余额不足提醒开关 + 阈值**：通知分组新增「余额不足提醒」Toggle，开启时可设**阈值**(默认 5 元)，App 通过 `push.settings` 下发 `balance`+`threshold` 到电脑端
 
 ### fix
 - 会话详情页拉取历史失败时不再清空对话

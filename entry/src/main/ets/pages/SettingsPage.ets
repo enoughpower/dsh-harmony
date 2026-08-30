@@ -31,6 +31,8 @@ struct SettingsPage {
   @State pushEnabled: boolean = true;
   @State pushSessionEnd: boolean = true;
   @State pushInteract: boolean = true;
+  @State pushBalance: boolean = true;
+  @State balanceThreshold: string = AppPrefs.DEFAULT_PUSH_BALANCE_THRESHOLD;
   @State lanPin: string = AppPrefs.DEFAULT_LAN_PIN;
   @State scanning: boolean = false;
   @State discovered: DiscoveredService[] = [];
@@ -138,6 +140,14 @@ struct SettingsPage {
       this.pushInteract = v;
     }).catch(() => {
     });
+    AppPrefs.getBool(ctx, AppPrefs.KEY_PUSH_BALANCE, true).then((v: boolean) => {
+      this.pushBalance = v;
+    }).catch(() => {
+    });
+    AppPrefs.getString(ctx, AppPrefs.KEY_PUSH_BALANCE_THRESHOLD, AppPrefs.DEFAULT_PUSH_BALANCE_THRESHOLD).then((v: string) => {
+      this.balanceThreshold = v;
+    }).catch(() => {
+    });
   }
 
   /** 总开关变化：本地保存 + 同步给电脑端推送器。 */
@@ -165,6 +175,26 @@ struct SettingsPage {
     this.pushInteract = checked;
     const ctx = this.getUIContext().getHostContext() as common.UIAbilityContext;
     AppPrefs.setBool(ctx, AppPrefs.KEY_PUSH_INTERACT, checked).catch(() => {
+    });
+    PushToken.reportSettings(ctx).catch(() => {
+    });
+  }
+
+  /** 余额不足提醒开关变化。 */
+  private togglePushBalance(checked: boolean): void {
+    this.pushBalance = checked;
+    const ctx = this.getUIContext().getHostContext() as common.UIAbilityContext;
+    AppPrefs.setBool(ctx, AppPrefs.KEY_PUSH_BALANCE, checked).catch(() => {
+    });
+    PushToken.reportSettings(ctx).catch(() => {
+    });
+  }
+
+  /** 余额阈值变化。 */
+  private saveBalanceThreshold(value: string): void {
+    this.balanceThreshold = value;
+    const ctx = this.getUIContext().getHostContext() as common.UIAbilityContext;
+    AppPrefs.setString(ctx, AppPrefs.KEY_PUSH_BALANCE_THRESHOLD, value).catch(() => {
     });
     PushToken.reportSettings(ctx).catch(() => {
     });
@@ -449,6 +479,44 @@ struct SettingsPage {
           .height(52)
           .padding({ left: 16, right: 16 })
           .backgroundColor($r('app.color.card_background'))
+          Row() {
+            Text('余额不足提醒')
+              .fontSize(15)
+              .fontColor($r('app.color.text_primary'))
+              .layoutWeight(1)
+            Toggle({ type: ToggleType.Switch, isOn: this.pushBalance })
+              .selectedColor($r('app.color.primary'))
+              .onChange((checked: boolean) => {
+                this.togglePushBalance(checked);
+              })
+          }
+          .width('100%')
+          .height(52)
+          .padding({ left: 16, right: 16 })
+          .backgroundColor($r('app.color.card_background'))
+          if (this.pushBalance) {
+            Row({ space: 12 }) {
+              Text('余额阈值')
+                .fontSize(15)
+                .fontColor($r('app.color.text_primary'))
+              TextInput({ text: this.balanceThreshold, placeholder: '5' })
+                .type(InputType.Number)
+                .maxLength(6)
+                .layoutWeight(1)
+                .height(40)
+                .fontSize(14)
+                .padding({ left: 10, right: 10 })
+                .backgroundColor($r('app.color.button_surface'))
+                .borderRadius(8)
+                .onChange((v: string) => {
+                  this.saveBalanceThreshold(v);
+                })
+            }
+            .width('100%')
+            .height(52)
+            .padding({ left: 16, right: 16 })
+            .backgroundColor($r('app.color.card_background'))
+          }
         }
         .width('100%')
         .borderRadius($r('app.float.card_corner_radius'))

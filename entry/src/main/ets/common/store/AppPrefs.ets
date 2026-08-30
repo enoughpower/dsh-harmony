@@ -21,6 +21,11 @@ export class AppPrefs {
   static readonly KEY_PUSH_SESSION_END: string = 'push_session_end';
   /** 需信息 / 需批准 提醒开关 */
   static readonly KEY_PUSH_INTERACT: string = 'push_interact';
+  /** 余额不足提醒开关 */
+  static readonly KEY_PUSH_BALANCE: string = 'push_balance';
+  /** 余额不足提醒阈值（元） */
+  static readonly KEY_PUSH_BALANCE_THRESHOLD: string = 'push_balance_threshold';
+  static readonly DEFAULT_PUSH_BALANCE_THRESHOLD: string = '5';
 
   static async getBool(context: common.Context, key: string, def: boolean): Promise<boolean> {
     try {
