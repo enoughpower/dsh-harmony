@@ -285,6 +285,53 @@ function cleanSummary(t) {
   return s;
 }
 
+// ---- DeepSeek 余额（每 5 分钟查一次 + 低于阈值告警推送） ----
+const BALANCE_INTERVAL = 5 * 60 * 1000;
+const BALANCE_THRESHOLD = Number(process.env.BALANCE_THRESHOLD || 10);
+let lastBalance = null;            // {currency,total,available,fetchedAt}
+let balanceLowNotified = false;
+async function getDeepseekKey() {
+  if (process.env.DEEPSEEK_API_KEY) return process.env.DEEPSEEK_API_KEY;
+  try {
+    const f = (process.env.HOME || process.env.USERPROFILE || '') + '/.dsh/.credentials.yaml';
+    if (existsSync(f)) {
+      const t = readFileSync(f, 'utf8');
+      const m = t.match(/^\s*DEEPSEEK_API_KEY:\s*([^\r\n]+)/m);
+      if (m && m[1]) return m[1].trim().replace(/^["']|["']$/g, '');
+    }
+  } catch { }
+  return '';
+}
+async function refreshBalance() {
+  try {
+    const key = await getDeepseekKey();
+    if (!key) { console.log('[balance] no deepseek key'); return; }
+    const res = await fetch('https://api.deepseek.com/user/balance', {
+      headers: { 'Authorization': 'Bearer ' + key },
+    });
+    if (res.status !== 200) { console.log('[balance] HTTP ' + res.status); return; }
+    const j = await res.json();
+    const info = (j.balance_infos || [])[0];
+    lastBalance = {
+      currency: info?.currency || '',
+      total: info?.total_balance || '0',
+      available: !!j.is_available,
+      fetchedAt: Date.now(),
+    };
+    const total = Number(lastBalance.total) || 0;
+    if (total < BALANCE_THRESHOLD && !balanceLowNotified) {
+      balanceLowNotified = true;
+      sendCase('💰 DeepSeek 余额不足', '当前余额 ' + lastBalance.total + ' ' + lastBalance.currency
+        + '，已低于 ' + BALANCE_THRESHOLD + '，请及时充值（避免任务中断）', '', 'balance');
+    } else if (total >= BALANCE_THRESHOLD) {
+      balanceLowNotified = false;
+    }
+    console.log('[balance] updated', JSON.stringify(lastBalance));
+  } catch (e) {
+    console.log('[balance] err', e.message);
+  }
+}
+
 // ---- 事件流订阅（场景3：会话中途收集信息） ----
 let wsRetry = 0;
 const sentQuestions = new Set();   // 已提醒的问题/批准，防重连回放重复推
@@ -383,6 +430,11 @@ const server = createServer((req, res) => {
     });
     return;
   }
+  if (req.url === '/api/balance') {
+    res.writeHead(200, { 'content-type': 'application/json' });
+    res.end(JSON.stringify({ ok: lastBalance !== null, balance: lastBalance, threshold: BALANCE_THRESHOLD }));
+    return;
+  }
   res.writeHead(404); res.end('{}');
 });
 
@@ -390,4 +442,7 @@ server.listen(3082, () => {
   console.log('DSH push-notify on :3082');
   console.log(APP_ID ? '[push] AGC configured' : '[push] 未配置 PUSH_APP_ID/SECRET（请在 AGC 开通后设置）');
   poll();
+  // 余额：启动即查一次，之后每 5 分钟刷新
+  refreshBalance();
+  setInterval(refreshBalance, BALANCE_INTERVAL);
 });

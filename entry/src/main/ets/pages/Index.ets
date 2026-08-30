@@ -41,6 +41,8 @@ struct Index {
   @State sessionError: string = '';
   @State pushOnline: boolean = false;
   @State pushChecking: boolean = false;
+  @State balanceTotal: string = '';
+  @State balanceCurrency: string = '';
   /** 状态栏高度（沉浸式时内容顶部留白），onPageShow 实测校正 */
   @State statusBarH: number = 28;
   /** 底部导航条/手势条高度（避让用） */
@@ -61,6 +63,8 @@ struct Index {
   @State leftStack: string[] = ['home'];
   private pushTimer: number = -1;
   private sessionTimer: number = -1;
+  private balanceTimer: number = -1;
+  private balanceChecking: boolean = false;
   private connTimer: number = -1;
   private netConn: connection.NetConnection | null = null;
   private store: ConnectionStore = new ConnectionStore();
@@ -137,6 +141,13 @@ struct Index {
         }, 15000);
       }
     }
+    // DeepSeek 余额（立即 + 60s 轮询；仅局域网可达 3082 时显示）
+    this.checkBalance();
+    if (this.balanceTimer < 0) {
+      this.balanceTimer = setInterval(() => {
+        this.checkBalance();
+      }, 60000);
+    }
     if (this.sessionTimer < 0) {
       this.sessionTimer = setInterval(() => {
         this.refreshSession();
@@ -168,6 +179,10 @@ struct Index {
     if (this.sessionTimer >= 0) {
       clearInterval(this.sessionTimer);
       this.sessionTimer = -1;
+    }
+    if (this.balanceTimer >= 0) {
+      clearInterval(this.balanceTimer);
+      this.balanceTimer = -1;
     }
     if (this.connTimer >= 0) {
       clearTimeout(this.connTimer);
@@ -342,6 +357,53 @@ struct Index {
     }).catch(() => {
       this.pushOnline = false;
       this.pushChecking = false;
+    });
+  }
+
+  /** 查 DeepSeek 余额（电脑端 push-notify :3082/api/balance；仅局域网可达）。 */
+  private checkBalance(): void {
+    if (this.balanceChecking) {
+      return;
+    }
+    this.balanceChecking = true;
+    const ctx = this.getUIContext().getHostContext() as common.UIAbilityContext;
+    this.store.loadAll(ctx).then((list: ConnectionProfile[]) => {
+      if (list.length === 0) {
+        this.balanceChecking = false;
+        return;
+      }
+      const host = this.store.pushHostOf(list);
+      if (host.length === 0) {
+        this.balanceChecking = false;
+        return;
+      }
+      const req = http.createHttp();
+      const options: http.HttpRequestOptions = {
+        'method': http.RequestMethod.GET,
+        'connectTimeout': 3000,
+        'readTimeout': 3000
+      };
+      req.request('http://' + host + ':3082/api/balance', options).then((resp: http.HttpResponse) => {
+        if (resp.responseCode === 200) {
+          try {
+            const j = JSON.parse(String(resp.result ?? '')) as Record<string, Object>;
+            const bal = j['balance'] as Record<string, Object> | undefined;
+            const t = bal?.['total'];
+            const c = bal?.['currency'];
+            if (bal !== undefined) {
+              this.balanceTotal = typeof t === 'string' ? t : '';
+              this.balanceCurrency = typeof c === 'string' ? c : '';
+            }
+          } catch (e) {
+          }
+        }
+      }).catch(() => {
+      }).finally(() => {
+        req.destroy();
+        this.balanceChecking = false;
+      });
+    }).catch(() => {
+      this.balanceChecking = false;
     });
   }
 
@@ -732,6 +794,23 @@ struct Index {
     .padding({ left: 4, right: 4 })
   }
 
+  /** DeepSeek 余额（仅局域网可达电脑端 3082 时显示） */
+  @Builder
+  BalanceBar() {
+    if (this.balanceTotal.length > 0) {
+      Row({ space: 8 }) {
+        Text('💰')
+          .fontSize(14)
+        Text('DeepSeek 余额 ' + this.balanceTotal + ' ' + (this.balanceCurrency.length > 0 ? this.balanceCurrency : ''))
+          .fontSize(12)
+          .fontColor($r('app.color.text_primary'))
+        Blank()
+      }
+      .width('100%')
+      .padding({ left: 4, right: 4, top: 2, bottom: 2 })
+    }
+  }
+
   @Builder
   LatestSessionCard() {
     Column({ space: 10 }) {
@@ -1005,6 +1084,8 @@ struct Index {
       if (FeatureFlags.PUSH_ENABLED) {
         this.PushStatusRow()
       }
+
+      this.BalanceBar()
 
       this.LatestSessionCard()
 
