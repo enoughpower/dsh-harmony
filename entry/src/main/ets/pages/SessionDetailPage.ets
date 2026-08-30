@@ -94,7 +94,7 @@ struct SessionDetailPage {
     this.updatedAt = parseInt(params?.['updatedAt'] ?? '0', 10);
     // 优先使用“当前可用连接”（局域网直连/公网隧道），网络切换后能自动换到新地址，避免打旧地址
     this.baseUrl = this.activeConnUrl.length > 0 ? this.activeConnUrl : (params?.['url'] ?? '');
-    this.loadHistory(true, 'top');
+    this.loadHistory(true, 'first');
     // 真实时：订阅 events.mux WebSocket；本会话事件 -> 防抖刷新（替代高频轮询）
     this.connectEvents();
     // 兜底轮询：WS 断开/静默时仍能刷新（低频，不引起滚动卡顿）
@@ -308,9 +308,9 @@ struct SessionDetailPage {
       if (mode === 'send') {
         // 发送后滚到最新（让刚发出的消息可见）
         this.scrollTo(Edge.Bottom);
-      } else if (mode === 'top') {
-        // 首次进入，停在顶部，不自动滚到底
-        this.scrollTo(Edge.Top);
+      } else if (mode === 'first') {
+        // 首次进入：滚到底部，定位到最后一条消息
+        this.scrollTo(Edge.Bottom);
       } else if (grew && this.loadedOnce && this.nearBottom) {
         // 实时刷新发现新消息，且用户本就停在底部 -> 跟随到底部；读上方时不强拖
         this.scrollTo(Edge.Bottom);

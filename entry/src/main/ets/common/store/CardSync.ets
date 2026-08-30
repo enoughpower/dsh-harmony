@@ -26,7 +26,9 @@ export class CardSync {
       'lastUsedLabel': '',
       'sessionTitle': '',
       'sessionStatus': '',
-      'sessionMeta': ''
+      'sessionMeta': '',
+      'balance': '',
+      'balanceCurrency': ''
     };
   }
 
@@ -56,8 +58,10 @@ export class CardSync {
 
   /** 由最近连接生成卡片数据（含在线状态与相对时间）。在线探测失败按 unknown 呈现。 */
   static dataFrom(list: ConnectionProfile[], online: boolean = false, known: boolean = true,
-    session: LatestSessionInfo | null = null): Record<string, string> {
+    session: LatestSessionInfo | null = null, balanceTotal: string = '', balanceCurrency: string = ''): Record<string, string> {
     const base = CardSync.defaultData();
+    base['balance'] = balanceTotal;
+    base['balanceCurrency'] = balanceCurrency;
     if (list.length > 0) {
       const p = list[0];
       base['lastUrl'] = p.url;
@@ -93,8 +97,9 @@ export class CardSync {
     }
   }
 
-  /** 用最近连接刷新所有已添加卡片（App 内建立新连接/打开首页时调用） */
-  static async syncAll(context: common.Context): Promise<void> {
+  /** 用最近连接刷新所有已添加卡片（App 内建立新连接/打开首页时调用）。
+   *  可传余额（内存值,避免读取缓存竞态）；不传则读缓存。 */
+  static async syncAll(context: common.Context, balanceTotal: string = '', balanceCurrency: string = ''): Promise<void> {
     const ids = await CardSync.loadIds(context);
     if (ids.length === 0) {
       return;
@@ -124,7 +129,11 @@ export class CardSync {
       } catch (e) {
       }
     }
-    const data = CardSync.dataFrom(list, online, known, session);
+    if (balanceTotal.length === 0) {
+      balanceTotal = await AppPrefs.getString(context, AppPrefs.KEY_BALANCE_TOTAL, '');
+      balanceCurrency = await AppPrefs.getString(context, AppPrefs.KEY_BALANCE_CURRENCY, '');
+    }
+    const data = CardSync.dataFrom(list, online, known, session, balanceTotal, balanceCurrency);
     const fd = formBindingData.createFormBindingData(data);
     for (const formId of ids) {
       formProvider.updateForm(formId, fd).catch((e: BusinessError) => {

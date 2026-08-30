@@ -312,6 +312,8 @@ export struct SettingsView {
       }
       .width('100%')
 
+      Scroll() {
+        Column({ space: 16 }) {
       Column({ space: 8 }) {
         this.SectionTitle('连接')
         Column({ space: 1 }) {
@@ -390,6 +392,7 @@ export struct SettingsView {
               .fontColor($r('app.color.text_primary'))
             TextInput({ text: this.lanPin, placeholder: AppPrefs.DEFAULT_LAN_PIN })
               .type(InputType.NUMBER_PASSWORD)
+              .enableAutoFill(false)
               .maxLength(16)
               .layoutWeight(1)
               .fontSize(15)
@@ -450,6 +453,7 @@ export struct SettingsView {
               .layoutWeight(1)
             Toggle({ type: ToggleType.Switch, isOn: this.pushSessionEnd })
               .selectedColor($r('app.color.primary'))
+              .enabled(this.pushEnabled)
               .onChange((checked: boolean) => {
                 this.togglePushSessionEnd(checked);
               })
@@ -458,6 +462,7 @@ export struct SettingsView {
           .height(52)
           .padding({ left: 16, right: 16 })
           .backgroundColor($r('app.color.card_background'))
+          .opacity(this.pushEnabled ? 1 : 0.4)
           Row() {
             Text('需信息 / 需批准')
               .fontSize(15)
@@ -465,6 +470,7 @@ export struct SettingsView {
               .layoutWeight(1)
             Toggle({ type: ToggleType.Switch, isOn: this.pushInteract })
               .selectedColor($r('app.color.primary'))
+              .enabled(this.pushEnabled)
               .onChange((checked: boolean) => {
                 this.togglePushInteract(checked);
               })
@@ -473,6 +479,7 @@ export struct SettingsView {
           .height(52)
           .padding({ left: 16, right: 16 })
           .backgroundColor($r('app.color.card_background'))
+          .opacity(this.pushEnabled ? 1 : 0.4)
           Row() {
             Text('余额不足提醒')
               .fontSize(15)
@@ -480,6 +487,7 @@ export struct SettingsView {
               .layoutWeight(1)
             Toggle({ type: ToggleType.Switch, isOn: this.pushBalance })
               .selectedColor($r('app.color.primary'))
+              .enabled(this.pushEnabled)
               .onChange((checked: boolean) => {
                 this.togglePushBalance(checked);
               })
@@ -488,6 +496,7 @@ export struct SettingsView {
           .height(52)
           .padding({ left: 16, right: 16 })
           .backgroundColor($r('app.color.card_background'))
+          .opacity(this.pushEnabled ? 1 : 0.4)
           if (this.pushBalance) {
             Row({ space: 12 }) {
               Text('余额阈值')
@@ -495,7 +504,10 @@ export struct SettingsView {
                 .fontColor($r('app.color.text_primary'))
               TextInput({ text: this.balanceThreshold, placeholder: '5' })
                 .type(InputType.Number)
+                .enableAutoFill(false)
+                .inputFilter('[0-9]')
                 .maxLength(6)
+                .enabled(this.pushEnabled)
                 .layoutWeight(1)
                 .height(40)
                 .fontSize(14)
@@ -510,6 +522,7 @@ export struct SettingsView {
             .height(52)
             .padding({ left: 16, right: 16 })
             .backgroundColor($r('app.color.card_background'))
+            .opacity(this.pushEnabled ? 1 : 0.4)
           }
         }
         .width('100%')
@@ -548,8 +561,12 @@ export struct SettingsView {
         .borderRadius($r('app.float.card_corner_radius'))
       }
       .width('100%')
-
-      Blank()
+        .width('100%')
+      }
+      }
+      .scrollable(ScrollDirection.Vertical)
+      .scrollBar(BarState.Off)
+      .layoutWeight(1)
     }
     .width('100%')
     .height('100%')

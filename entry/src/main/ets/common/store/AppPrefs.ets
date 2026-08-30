@@ -26,6 +26,9 @@ export class AppPrefs {
   /** 余额不足提醒阈值（元） */
   static readonly KEY_PUSH_BALANCE_THRESHOLD: string = 'push_balance_threshold';
   static readonly DEFAULT_PUSH_BALANCE_THRESHOLD: string = '5';
+  /** DeepSeek 余额缓存（同步给服务卡片） */
+  static readonly KEY_BALANCE_TOTAL: string = 'balance_total';
+  static readonly KEY_BALANCE_CURRENCY: string = 'balance_currency';
 
   static async getBool(context: common.Context, key: string, def: boolean): Promise<boolean> {
     try {

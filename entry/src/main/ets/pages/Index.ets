@@ -43,6 +43,8 @@ struct Index {
   @State pushChecking: boolean = false;
   @State balanceTotal: string = '';
   @State balanceCurrency: string = '';
+  @State balanceProgress: number = 100;
+  @State cardScale: number = 1;
   /** 状态栏高度（沉浸式时内容顶部留白），onPageShow 实测校正 */
   @State statusBarH: number = 28;
   /** 底部导航条/手势条高度（避让用） */
@@ -57,6 +59,8 @@ struct Index {
   @State activeBase: string = '';
   /** 解析出的“当前可用”连接地址（自动切换：局域网直连 -> 公网隧道）；共享给控制台页做响应式切换 */
   @StorageLink('activeConnUrl') activeConnUrl: string = '';
+  @StorageLink('pendingSessionId') @Watch('onPendingDeepLink') pendingSessionId: string = '';
+  @StorageLink('pendingDshUrl') pendingDshUrl: string = '';
   /** 内网直连与公网隧道都不可用（首页常驻提示） */
   @State connFailed: boolean = false;
   /** 左栏导航栈：home / settings / history */
@@ -65,6 +69,8 @@ struct Index {
   private sessionTimer: number = -1;
   private balanceTimer: number = -1;
   private balanceChecking: boolean = false;
+  private balanceTickTimer: number = -1;
+  private prevBalanceTotal: string = '';
   private connTimer: number = -1;
   private netConn: connection.NetConnection | null = null;
   private store: ConnectionStore = new ConnectionStore();
@@ -143,6 +149,7 @@ struct Index {
     }
     // DeepSeek 余额（立即 + 60s 轮询；仅局域网可达 3082 时显示）
     this.checkBalance();
+    this.startBalanceCountdown();
     if (this.balanceTimer < 0) {
       this.balanceTimer = setInterval(() => {
         this.checkBalance();
@@ -183,6 +190,10 @@ struct Index {
     if (this.balanceTimer >= 0) {
       clearInterval(this.balanceTimer);
       this.balanceTimer = -1;
+    }
+    if (this.balanceTickTimer >= 0) {
+      clearInterval(this.balanceTickTimer);
+      this.balanceTickTimer = -1;
     }
     if (this.connTimer >= 0) {
       clearTimeout(this.connTimer);
@@ -393,6 +404,19 @@ struct Index {
             if (bal !== undefined) {
               this.balanceTotal = typeof t === 'string' ? t : '';
               this.balanceCurrency = typeof c === 'string' ? c : '';
+              // 余额变化 -> 缓存 + 刷新首页卡片 + 重置 5 分钟倒计时 + 缩放动画 + 同步服务卡片
+              if (this.balanceTotal.length > 0 && this.balanceTotal !== this.prevBalanceTotal) {
+                this.prevBalanceTotal = this.balanceTotal;
+                this.balanceProgress = 100;
+                this.pulseBalanceCard();
+                AppPrefs.setString(ctx, AppPrefs.KEY_BALANCE_TOTAL, this.balanceTotal).catch(() => {
+                });
+                AppPrefs.setString(ctx, AppPrefs.KEY_BALANCE_CURRENCY, this.balanceCurrency).catch(() => {
+                });
+                // 直接传内存余额刷新小组件（避免读取缓存竞态）
+                CardSync.syncAll(ctx, this.balanceTotal, this.balanceCurrency).catch(() => {
+                });
+              }
             }
           } catch (e) {
           }
@@ -405,6 +429,33 @@ struct Index {
     }).catch(() => {
       this.balanceChecking = false;
     });
+  }
+
+  /** 余额更新时的卡片轻缩动画。 */
+  private pulseBalanceCard(): void {
+    try {
+      this.getUIContext().animateTo({ duration: 220, curve: Curve.EaseOut }, () => {
+        this.cardScale = 1.05;
+      });
+      setTimeout(() => {
+        this.getUIContext().animateTo({ duration: 320, curve: Curve.EaseOut }, () => {
+          this.cardScale = 1;
+        });
+      }, 240);
+    } catch (e) {
+    }
+  }
+
+  /** 5 分钟倒计时（每次余额变化重置为满格，每秒递减）。 */
+  private startBalanceCountdown(): void {
+    if (this.balanceTickTimer >= 0) {
+      return;
+    }
+    this.balanceTickTimer = setInterval(() => {
+      if (this.balanceProgress > 0) {
+        this.balanceProgress = Math.max(0, this.balanceProgress - (100 / 300));
+      }
+    }, 1000);
   }
 
   /** 设置网络变化监听：网络切换/断开时自动重新解析可用连接。 */
@@ -704,6 +755,17 @@ struct Index {
     // 打不开：留在首页（默认）
   }
 
+  /** AppStorage pending 深链变化（通知/卡片前台点击）-> 直达对应会话详情页。 */
+  private onPendingDeepLink(): void {
+    const sid = this.pendingSessionId;
+    const url = this.pendingDshUrl;
+    if (sid.length > 0 && url.length > 0) {
+      this.pendingSessionId = '';
+      this.pendingDshUrl = '';
+      this.openSessionById(url, sid);
+    }
+  }
+
   /** 通知/卡片带了具体 sessionId：直接打开该会话的原生详情页（会话数据由详情页自取）。 */
   private openSessionById(url: string, sessionId: string): void {
     this.activeConnUrl = url;
@@ -794,20 +856,40 @@ struct Index {
     .padding({ left: 4, right: 4 })
   }
 
-  /** DeepSeek 余额（仅局域网可达电脑端 3082 时显示） */
+  /** DeepSeek 余额卡片（大数字 + 5 分钟倒计时环形进度 + 更新缩放动画；仅局域网可达时显示） */
   @Builder
-  BalanceBar() {
+  BalanceCard() {
     if (this.balanceTotal.length > 0) {
-      Row({ space: 8 }) {
-        Text('💰')
-          .fontSize(14)
-        Text('DeepSeek 余额 ' + this.balanceTotal + ' ' + (this.balanceCurrency.length > 0 ? this.balanceCurrency : ''))
-          .fontSize(12)
-          .fontColor($r('app.color.text_primary'))
-        Blank()
+      Stack({ alignContent: Alignment.TopEnd }) {
+        Column({ space: 6 }) {
+          Text('DeepSeek 余额')
+            .fontSize(12)
+            .fontColor($r('app.color.text_secondary'))
+          Text(this.balanceTotal)
+            .fontSize(30)
+            .fontWeight(FontWeight.Bold)
+            .fontColor($r('app.color.primary'))
+          if (this.balanceCurrency.length > 0) {
+            Text(this.balanceCurrency)
+              .fontSize(12)
+              .fontColor($r('app.color.text_secondary'))
+          }
+        }
+        .alignItems(HorizontalAlign.Start)
+        .width('100%')
+        Progress({ value: this.balanceProgress, total: 100, type: ProgressType.Ring })
+          .width(15)
+          .height(15)
+          .color($r('app.color.primary'))
+          .style({ strokeWidth: 2 })
+          .margin({ right: 0, top: 0 })
+          .animation({ duration: 1000, curve: Curve.Linear })
       }
       .width('100%')
-      .padding({ left: 4, right: 4, top: 2, bottom: 2 })
+      .padding({ left: 20, right: 20, top: 16, bottom: 16 })
+      .backgroundColor($r('app.color.card_background'))
+      .borderRadius($r('app.float.card_corner_radius'))
+      .scale({ x: this.cardScale, y: this.cardScale })
     }
   }
 
@@ -843,7 +925,7 @@ struct Index {
         Row({ space: 10 }) {
           Text(this.latestSession!.running ? '● 进行中' : '● 已结束')
             .fontSize(12)
-            .fontColor(this.latestSession!.running ? $r('app.color.primary') : $r('app.color.text_secondary'))
+            .fontColor(this.latestSession!.running ? '#34C759' : $r('app.color.text_secondary'))
           Text(this.latestSession!.turns + ' 轮 · ' + this.latestSession!.steps + ' 步')
             .fontSize(12)
             .fontColor($r('app.color.text_secondary'))
@@ -1085,7 +1167,7 @@ struct Index {
         this.PushStatusRow()
       }
 
-      this.BalanceBar()
+      this.BalanceCard()
 
       this.LatestSessionCard()
 

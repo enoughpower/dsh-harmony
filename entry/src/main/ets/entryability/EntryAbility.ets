@@ -2,6 +2,7 @@ import { AbilityConstant, UIAbility, Want, Configuration } from '@kit.AbilityKit
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { window } from '@kit.ArkUI';
 import { PushToken } from '../common/store/PushToken';
+import { pushService, pushCommon } from '@kit.PushKit';
 import { WindowBar } from '../common/utils/WindowBar';
 import { DeviceUtils } from '../common/utils/DeviceUtils';
 import { FeatureFlags } from '../common/config/FeatureFlags';
@@ -24,6 +25,15 @@ export default class EntryAbility extends UIAbility {
     if (FeatureFlags.PUSH_ENABLED) {
       PushToken.ensureAndReport(this.context).catch(() => {
       });
+      // 监听推送消息（通知点击时拿 data 里的 dshUrl/sessionId 深链）
+      try {
+        pushService.receiveMessage('DEFAULT', this, (payload: pushCommon.PushPayload) => {
+          hilog.info(DOMAIN, TAG, 'push receiveMessage fired type=%{public}s data=%{public}s', payload.type, String(payload.data ?? '').slice(0, 200));
+          this.consumePushPayload(payload);
+        });
+      } catch (e) {
+        hilog.warn(DOMAIN, TAG, 'receiveMessage failed: %{public}s', (e as Error).message);
+      }
     }
   }
 
@@ -72,18 +82,51 @@ export default class EntryAbility extends UIAbility {
     hilog.info(DOMAIN, TAG, 'EntryAbility onBackground.');
   }
 
-  /** 服务卡片/通知点击直达：把 dshUrl(+可选 sessionId) 放进 AppStorage，Index 页面消费 */
+  /** 服务卡片/通知点击直达：把 dshUrl(+可选 sessionId) 放进 AppStorage，Index 页面消费。
+   *  兼容两种投递：① want.parameters 直接用 dshUrl/sessionId key；② data 为 JSON 串(通知点击)。 */
   private consumeCardUrl(want: Want): void {
-    const url = want.parameters?.['dshUrl'];
+    let url = want.parameters?.['dshUrl'] as string | undefined;
+    let sid = want.parameters?.['sessionId'] as string | undefined;
+    const need = typeof url !== 'string' || url.length === 0 || typeof sid !== 'string' || sid.length === 0;
+    if (need) {
+      const dataRaw = want.parameters?.['data'];
+      if (typeof dataRaw === 'string' && dataRaw.length > 0) {
+        try {
+          const obj = JSON.parse(dataRaw) as Record<string, Object>;
+          if (typeof obj['dshUrl'] === 'string') {
+            url = obj['dshUrl'] as string;
+          }
+          if (typeof obj['sessionId'] === 'string') {
+            sid = obj['sessionId'] as string;
+          }
+        } catch (e) {
+        }
+      }
+    }
     if (typeof url === 'string' && url.length > 0) {
       AppStorage.setOrCreate('pendingDshUrl', url);
-      const sid = want.parameters?.['sessionId'];
-      if (typeof sid === 'string' && sid.length > 0) {
-        AppStorage.setOrCreate('pendingSessionId', sid);
-      } else {
-        AppStorage.setOrCreate('pendingSessionId', '');
-      }
+      AppStorage.setOrCreate('pendingSessionId', (typeof sid === 'string' && sid.length > 0) ? sid : '');
       hilog.info(DOMAIN, TAG, 'card/push click pending url=%{public}s sessionId=%{public}s', url, String(sid ?? ''));
+    }
+  }
+
+  /** 推送消息(data 为 JSON 串) -> 解析 dshUrl/sessionId 深链。 */
+  private consumePushPayload(payload: pushCommon.PushPayload): void {
+    const raw = payload.data;
+    if (typeof raw !== 'string' || raw.length === 0) {
+      return;
+    }
+    try {
+      const obj = JSON.parse(raw) as Record<string, Object>;
+      const url = obj['dshUrl'];
+      const sid = obj['sessionId'];
+      if (typeof url === 'string' && url.length > 0) {
+        AppStorage.setOrCreate('pendingDshUrl', url);
+        AppStorage.setOrCreate('pendingSessionId', (typeof sid === 'string' && sid.length > 0) ? sid : '');
+        hilog.info(DOMAIN, TAG, 'push payload deep-link url=%{public}s sessionId=%{public}s', String(url), String(sid ?? ''));
+      }
+    } catch (e) {
+      hilog.warn(DOMAIN, TAG, 'push payload parse err: %{public}s', (e as Error).message);
     }
   }
 
