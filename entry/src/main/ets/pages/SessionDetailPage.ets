@@ -241,8 +241,6 @@ struct SessionDetailPage {
                   Text(m.text)
                     .fontSize(13)
                     .fontColor($r('app.color.text_primary'))
-                    .maxLines(5)
-                    .textOverflow({ overflow: TextOverflow.Ellipsis })
                     .alignSelf(ItemAlign.Start)
                 }
                 .width('100%')
