@@ -142,13 +142,21 @@ struct Index {
         this.refreshSession();
       }, 30000);
     }
-    // 服务卡片点击：默认进"原生会话详情页"（该连接的最新会话）；打不开则默认进首页
+    // 服务卡片 / 通知点击：带 sessionId 直达对应会话详情页；否则进"该连接的最新会话"详情页；都拿不到则进首页
+    const pendingSid = AppStorage.get<string>('pendingSessionId');
     const pending = AppStorage.get<string>('pendingDshUrl');
     if (pending !== undefined && pending !== null && pending.length > 0) {
-      AppStorage.setOrCreate('pendingDshUrl', '');
-      this.openCardSessionDetail(pending);
+      if (pendingSid !== undefined && pendingSid !== null && pendingSid.length > 0) {
+        AppStorage.setOrCreate('pendingDshUrl', '');
+        AppStorage.setOrCreate('pendingSessionId', '');
+        this.openSessionById(pending, pendingSid);
+      } else {
+        AppStorage.setOrCreate('pendingDshUrl', '');
+        this.openCardSessionDetail(pending);
+      }
       return;
     }
+    AppStorage.setOrCreate('pendingSessionId', '');
     // 自动启动控制台：由 resolveConnection() 在确定可用连接后触发
   }
 
@@ -632,6 +640,26 @@ struct Index {
     } catch (e) {
     }
     // 打不开：留在首页（默认）
+  }
+
+  /** 通知/卡片带了具体 sessionId：直接打开该会话的原生详情页（会话数据由详情页自取）。 */
+  private openSessionById(url: string, sessionId: string): void {
+    this.activeConnUrl = url;
+    this.activeBase = url;
+    router.pushUrl({
+      url: 'pages/SessionDetailPage',
+      params: {
+        'sessionId': sessionId,
+        'title': '',
+        'objective': '',
+        'phase': '',
+        'running': 'false',
+        'turns': '0',
+        'steps': '0',
+        'updatedAt': '0',
+        'url': url
+      }
+    });
   }
 
   @Builder

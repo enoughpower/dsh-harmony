@@ -72,12 +72,18 @@ export default class EntryAbility extends UIAbility {
     hilog.info(DOMAIN, TAG, 'EntryAbility onBackground.');
   }
 
-  /** 服务卡片点击直达：把 dshUrl 放进 AppStorage，Index 页面消费 */
+  /** 服务卡片/通知点击直达：把 dshUrl(+可选 sessionId) 放进 AppStorage，Index 页面消费 */
   private consumeCardUrl(want: Want): void {
     const url = want.parameters?.['dshUrl'];
     if (typeof url === 'string' && url.length > 0) {
       AppStorage.setOrCreate('pendingDshUrl', url);
-      hilog.info(DOMAIN, TAG, 'card click pending url: %{public}s', url);
+      const sid = want.parameters?.['sessionId'];
+      if (typeof sid === 'string' && sid.length > 0) {
+        AppStorage.setOrCreate('pendingSessionId', sid);
+      } else {
+        AppStorage.setOrCreate('pendingSessionId', '');
+      }
+      hilog.info(DOMAIN, TAG, 'card/push click pending url=%{public}s sessionId=%{public}s', url, String(sid ?? ''));
     }
   }
 

@@ -66,7 +66,7 @@ async function huaweiJwt() {
   return jwtCache.token;
 }
 
-async function huaweiSend(title, body) {
+async function huaweiSend(title, body, sessionId) {
   const keyFile = process.env.PUSH_KEY_FILE || '';
   if (!keyFile) { console.log('[push] 未配置 PUSH_KEY_FILE(V3 服务账号密钥), 跳过发送'); return; }
   if (pushTokens.length === 0) { console.log('[push] 无手机 token，跳过'); return; }
@@ -87,27 +87,51 @@ async function huaweiSend(title, body) {
           clickAction: { actionType: 0 },
         },
       },
+      // 通知点击深链：App 从 data 读 sessionId + dshUrl 直达该会话详情页
+      data: { dshUrl: DSH_BASE, sessionId: String(sessionId || '') },
       target: { token: pushTokens },
       pushOptions: { testMessage: false },
     }),
   });
   const data = await res.json();
+  // 稳定性：鉴权失败 → 强制刷新 JWT；无效/过期 token → 清空(下次 App 启动会重新上报)
+  if (res.status === 401 || res.status === 403) {
+    jwtCache = { token: '', expiresAt: 0 };
+  }
+  const code = Number(data?.code || 0);
+  if (code && [80300007, 80300002, 80300003].includes(code)) {
+    const before = pushTokens.length;
+    pushTokens = [];
+    saveTokens();
+    console.log('[push] cleared invalid tokens, before=' + before);
+  }
   console.log('[push] send ->', res.status, JSON.stringify(data).slice(0, 200));
 }
 
-/** 发送节流队列：串行且 ≥3.1s 间隔（测试渠道限流 3 秒 1 条） */
+/** 发送节流队列：串行且 ≥3.1s 间隔（测试渠道限流 3 秒 1 条）；另加 per-session 冷却避免刷屏 */
 const sendQueue = [];
 let sending = false;
-function sendCase(title, body) {
-  sendQueue.push({ title, body });
+const cooldown = new Map();   // sessionId -> lastSentAt
+const COOLDOWN_MS = 12000;
+function sendCase(title, body, sessionId) {
+  const key = String(sessionId || '');
+  const now = Date.now();
+  if (key) {
+    const last = cooldown.get(key) || 0;
+    if (now - last < COOLDOWN_MS) {
+      console.log('[push] throttled session', key);
+      return;
+    }
+    cooldown.set(key, now);
+  }
+  sendQueue.push({ title, body, sessionId });
   drainQueue();
 }
 function drainQueue() {
   if (sending || sendQueue.length === 0) return;
   const item = sendQueue.shift();
   sending = true;
-  const doSend = huaweiSend;
-  doSend(item.title, item.body).catch(() => {}).finally(() => {
+  huaweiSend(item.title, item.body, item.sessionId).catch(() => {}).finally(() => {
     sending = false;
     setTimeout(drainQueue, 3100);
   });
@@ -172,6 +196,7 @@ async function poll() {
     const j = await res.json();
     pollFailCount = 0;
     const items = j.result?.value?.items || [];
+    lastPollAt = Date.now();
     if (items.length === 0) return;
 
     for (const it of items) {
@@ -193,7 +218,9 @@ async function poll() {
         const done = (phase === 'complete');
         const summary = await sessionSummary(sid);
         const head = done ? '✅ 任务完成' : '⚠️ 会话已结束';
-        await sendCase(title, summary ? head + '：' + summary : head);
+        const goal = String(s.goal?.goal?.objective || '').slice(0, 40);
+        const meta = goal ? ' · ' + goal : '';
+        await sendCase(title + meta, summary ? head + '：' + summary : head, sid);
       } else if (it.running) {
         runningMap.set(sid, true);
         // 场景2·超时：运行中但 updatedAt 停滞（连续 >5 次无响应）
@@ -203,7 +230,7 @@ async function poll() {
           st.count += 1;
           if (st.count > STALL_LIMIT && !st.notified) {
             st.notified = true;
-            await sendCase(title, '⏰ 长时间无响应 · 已超过 ' + Math.round(stallMs / 1000) + 's（可能异常/卡住）');
+            await sendCase(title, '⏰ 长时间无响应 · 已超过 ' + Math.round(stallMs / 1000) + 's（可能异常/卡住）', sid);
           }
         } else {
           st.count = 0;
@@ -259,6 +286,9 @@ function cleanSummary(t) {
 
 // ---- 事件流订阅（场景3：会话中途收集信息） ----
 let wsRetry = 0;
+const sentQuestions = new Set();   // 已提醒的问题/批准，防重连回放重复推
+const startedAt = Date.now();
+let lastPollAt = 0;
 function connectEventsHost() {
   const u = new URL(DSH_BASE);
   const wsUrl = 'ws://' + u.host + '/api/events.mux?token=' + encodeURIComponent(dshToken);
@@ -274,11 +304,18 @@ function connectEventsHost() {
         const meta = sessionMeta.get(frame.sessionId) || {};
         const q = (frame.questions || [])[0];
         const qText = q ? (q.question || q.header || '请回复') : '请回复';
-        sendCase(meta.title || 'DSH 任务', '📩 需要你提供信息：' + String.fromCharCode(10) + qText.slice(0, 200));
+        // 问题去重：同一会话的同一问题(重连回放/replay)不重复推
+        const qKey = String(frame.sessionId || '') + ':' + qText;
+        if (sentQuestions.has(qKey)) return;
+        sentQuestions.add(qKey);
+        sendCase(meta.title || 'DSH 任务', '📩 需要你提供信息：' + String.fromCharCode(10) + qText.slice(0, 200), frame.sessionId);
       } else if (frame.type === 'approval/requested') {
         const meta = sessionMeta.get(frame.sessionId) || {};
+        const aKey = String(frame.sessionId || '') + ':' + String(frame.approvalId || '');
+        if (sentQuestions.has(aKey)) return;
+        sentQuestions.add(aKey);
         sendCase(meta.title || 'DSH 任务', '🛂 需要你批准：' + String(frame.toolName || '工具调用') +
-          (frame.reason ? String.fromCharCode(10) + frame.reason : ''));
+          (frame.reason ? String.fromCharCode(10) + frame.reason : ''), frame.sessionId);
       }
     } catch (e) {
       console.log('[evt] parse err', e.message);
@@ -295,7 +332,13 @@ function connectEventsHost() {
 const server = createServer((req, res) => {
   if (req.url === '/api/status') {
     res.writeHead(200, { 'content-type': 'application/json' });
-    res.end(JSON.stringify({ status: 'online', sender: SENDER, tokens: pushTokens.length, mux: wsRetry < 5 }));
+    res.end(JSON.stringify({
+      status: 'online', sender: SENDER,
+      tokens: pushTokens.length, mux: wsRetry < 5,
+      queued: sendQueue.length,
+      uptime: Math.round((Date.now() - startedAt) / 1000),
+      lastPoll: lastPollAt,
+    }));
     return;
   }
   if (req.url === '/api/push.token' && req.method === 'POST') {
