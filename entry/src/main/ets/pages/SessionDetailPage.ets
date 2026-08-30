@@ -187,20 +187,6 @@ struct SessionDetailPage {
         }
         .width('100%')
 
-        if (this.objective.length > 0) {
-          Column({ space: 4 }) {
-            Text('目标').fontSize(12).fontColor($r('app.color.text_secondary')).alignSelf(ItemAlign.Start)
-            Text(this.objective)
-              .fontSize(14)
-              .fontColor($r('app.color.text_primary'))
-              .alignSelf(ItemAlign.Start)
-          }
-          .width('100%')
-          .padding(14)
-          .backgroundColor($r('app.color.card_background'))
-          .borderRadius($r('app.float.card_corner_radius'))
-        }
-
         Row({ space: 8 }) {
           if (this.running) {
             this.CtrlButton('⏸ 暂停', '#E5484D', () => { this.confirmControl('goal.pause', '暂停'); })
