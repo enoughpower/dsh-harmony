@@ -515,7 +515,7 @@ export class PocketApi {
         if (e === undefined) {
           continue;
         }
-        if (e.type === 'assistant/message' || e.type === 'message' || e.type === 'user/message') {
+        if (e.type === 'assistant/message' || e.type === 'message' || e.type === 'user/message' || e.type === 'user/prompt' || e.type === 'user/transcription') {
           const m = e.data?.message;
           if (m !== undefined) {
             const role = m.role ?? '';

@@ -210,7 +210,7 @@ struct SessionDetailPage {
         .width('100%')
 
         Row() {
-          Text('最新消息')
+          Text('对话')
             .fontSize(14)
             .fontWeight(FontWeight.Medium)
             .fontColor($r('app.color.text_secondary'))
