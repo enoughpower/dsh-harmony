@@ -15,6 +15,10 @@ export class AppPrefs {
   static readonly DEFAULT_LAN_PIN: string = '11111111';
   /** dsh-pocket 访问令牌（网页 Cookie 提取/登录所得；供服务卡片复用） */
   static readonly KEY_POCKET_TOKEN: string = 'pocket_token';
+  /** 推送总开关（关=电脑端完全不推） */
+  static readonly KEY_PUSH_ENABLED: string = 'push_enabled';
+  /** 会话结束提醒开关 */
+  static readonly KEY_PUSH_SESSION_END: string = 'push_session_end';
 
   static async getBool(context: common.Context, key: string, def: boolean): Promise<boolean> {
     try {

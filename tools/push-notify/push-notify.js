@@ -33,6 +33,21 @@ function loadTokens() {
 }
 function saveTokens() { writeFileSync(TOKEN_FILE, JSON.stringify(pushTokens, null, 2)); }
 
+// ---- 推送开关（App 通过 /api/push.settings 下发，持久化 settings.json） ----
+const SETTINGS_FILE = new URL('./settings.json', import.meta.url).pathname;
+let pushSettings = loadSettings();
+function loadSettings() {
+  const def = { pushEnabled: true, sessionEnd: true, interact: true };
+  if (existsSync(SETTINGS_FILE)) {
+    try {
+      const saved = JSON.parse(readFileSync(SETTINGS_FILE, 'utf8'));
+      return { ...def, ...saved };
+    } catch { }
+  }
+  return def;
+}
+function saveSettings() { writeFileSync(SETTINGS_FILE, JSON.stringify(pushSettings, null, 2)); }
+
 // ---- 华为 Push API V3（SENDER=huawei，HarmonyOS NEXT 5.x+ 必须）----
 // 鉴权: 服务账号密钥(API Console 下载的 JSON) → PS256 签名 JWT → Authorization: Bearer <jwt>
 // 端点: POST https://push-api.cloud.huawei.com/v3/<projectId>/messages:send (push-type: 0 = 通知消息)
@@ -112,7 +127,11 @@ const sendQueue = [];
 let sending = false;
 const cooldown = new Map();   // sessionId -> lastSentAt
 const COOLDOWN_MS = 12000;
-function sendCase(title, body, sessionId) {
+function sendCase(title, body, sessionId, type) {
+  // 推送开关：总开关关->全不发；对应场景关->跳过
+  if (!pushSettings.pushEnabled) { console.log('[push] push disabled by settings'); return; }
+  if (type === 'end' && !pushSettings.sessionEnd) { console.log('[push] session-end disabled'); return; }
+  if (type === 'interact' && !pushSettings.interact) { console.log('[push] interact disabled'); return; }
   const key = String(sessionId || '');
   const now = Date.now();
   if (key) {
@@ -215,7 +234,7 @@ async function poll() {
         const head = done ? '✅ 任务完成' : '⚠️ 会话已结束';
         const goal = String(s.goal?.goal?.objective || '').slice(0, 40);
         const meta = goal ? ' · ' + goal : '';
-        await sendCase(title + meta, summary ? head + '：' + summary : head, sid);
+        await sendCase(title + meta, summary ? head + '：' + summary : head, sid, 'end');
       } else if (it.running) {
         runningMap.set(sid, true);
       }
@@ -290,14 +309,14 @@ function connectEventsHost() {
         const qKey = String(frame.sessionId || '') + ':' + qText;
         if (sentQuestions.has(qKey)) return;
         sentQuestions.add(qKey);
-        sendCase(meta.title || 'DSH 任务', '📩 需要你提供信息：' + String.fromCharCode(10) + qText.slice(0, 200), frame.sessionId);
+        sendCase(meta.title || 'DSH 任务', '📩 需要你提供信息：' + String.fromCharCode(10) + qText.slice(0, 200), frame.sessionId, 'interact');
       } else if (frame.type === 'approval/requested') {
         const meta = sessionMeta.get(frame.sessionId) || {};
         const aKey = String(frame.sessionId || '') + ':' + String(frame.approvalId || '');
         if (sentQuestions.has(aKey)) return;
         sentQuestions.add(aKey);
         sendCase(meta.title || 'DSH 任务', '🛂 需要你批准：' + String(frame.toolName || '工具调用') +
-          (frame.reason ? String.fromCharCode(10) + frame.reason : ''), frame.sessionId);
+          (frame.reason ? String.fromCharCode(10) + frame.reason : ''), frame.sessionId, 'interact');
       }
     } catch (e) {
       console.log('[evt] parse err', e.message);
@@ -320,7 +339,28 @@ const server = createServer((req, res) => {
       queued: sendQueue.length,
       uptime: Math.round((Date.now() - startedAt) / 1000),
       lastPoll: lastPollAt,
+      settings: pushSettings,
     }));
+    return;
+  }
+  if (req.url === '/api/push.settings' && req.method === 'POST') {
+    let body = '';
+    req.on('data', (c) => { body += c; });
+    req.on('end', () => {
+      try {
+        const j = JSON.parse(body);
+        const p = (j && j.payload) || {};
+        if (typeof p.pushEnabled === 'boolean') pushSettings.pushEnabled = p.pushEnabled;
+        if (typeof p.sessionEnd === 'boolean') pushSettings.sessionEnd = p.sessionEnd;
+        if (typeof p.interact === 'boolean') pushSettings.interact = p.interact;
+        saveSettings();
+        console.log('[api] push.settings ->', JSON.stringify(pushSettings));
+        res.writeHead(200, { 'content-type': 'application/json' });
+        res.end(JSON.stringify({ ok: true, settings: pushSettings }));
+      } catch (e) {
+        res.writeHead(400); res.end('{}');
+      }
+    });
     return;
   }
   if (req.url === '/api/push.token' && req.method === 'POST') {

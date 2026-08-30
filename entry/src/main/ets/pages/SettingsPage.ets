@@ -7,6 +7,7 @@ import { ConnectionStore } from '../common/store/ConnectionStore';
 import { fileIo } from '@kit.CoreFileKit';
 import { util } from '@kit.ArkTS';
 import { AppPrefs } from '../common/store/AppPrefs';
+import { PushToken } from '../common/store/PushToken';
 import { BackButton } from '../components/BackButton';
 import { LanDiscovery, DiscoveredService } from '../common/utils/LanDiscovery';
 import { ConnectionCard } from '../components/ConnectionCard';
@@ -27,6 +28,8 @@ struct SettingsPage {
   @State version: string = '1.0.0';
   @State historyCount: number = 0;
   @State autoConnect: boolean = true;
+  @State pushEnabled: boolean = true;
+  @State pushSessionEnd: boolean = true;
   @State lanPin: string = AppPrefs.DEFAULT_LAN_PIN;
   @State scanning: boolean = false;
   @State discovered: DiscoveredService[] = [];
@@ -48,6 +51,7 @@ struct SettingsPage {
     this.loadVersion();
     this.loadHistoryCount();
     this.loadAutoConnect();
+    this.loadPushSettings();
     this.loadLanPin();
     // 实测状态栏高度（沉浸式由 EntryAbility 全局设置）
     const ctx = this.getUIContext().getHostContext() as common.UIAbilityContext;
@@ -116,6 +120,38 @@ struct SettingsPage {
     this.autoConnect = checked;
     const ctx = this.getUIContext().getHostContext() as common.UIAbilityContext;
     AppPrefs.setBool(ctx, AppPrefs.KEY_AUTO_CONNECT, checked).catch(() => {
+    });
+  }
+
+  private loadPushSettings(): void {
+    const ctx = this.getUIContext().getHostContext() as common.UIAbilityContext;
+    AppPrefs.getBool(ctx, AppPrefs.KEY_PUSH_ENABLED, true).then((v: boolean) => {
+      this.pushEnabled = v;
+    }).catch(() => {
+    });
+    AppPrefs.getBool(ctx, AppPrefs.KEY_PUSH_SESSION_END, true).then((v: boolean) => {
+      this.pushSessionEnd = v;
+    }).catch(() => {
+    });
+  }
+
+  /** 总开关变化：本地保存 + 同步给电脑端推送器。 */
+  private togglePush(checked: boolean): void {
+    this.pushEnabled = checked;
+    const ctx = this.getUIContext().getHostContext() as common.UIAbilityContext;
+    AppPrefs.setBool(ctx, AppPrefs.KEY_PUSH_ENABLED, checked).catch(() => {
+    });
+    PushToken.reportSettings(ctx).catch(() => {
+    });
+  }
+
+  /** 会话结束提醒开关变化。 */
+  private togglePushSessionEnd(checked: boolean): void {
+    this.pushSessionEnd = checked;
+    const ctx = this.getUIContext().getHostContext() as common.UIAbilityContext;
+    AppPrefs.setBool(ctx, AppPrefs.KEY_PUSH_SESSION_END, checked).catch(() => {
+    });
+    PushToken.reportSettings(ctx).catch(() => {
     });
   }
 
@@ -348,6 +384,45 @@ struct SettingsPage {
           }, (item: DiscoveredService) => item.url)
         }
         .width('100%')
+      }
+
+      Column({ space: 8 }) {
+        this.SectionTitle('通知')
+        Column({ space: 1 }) {
+          Row() {
+            Text('启用推送')
+              .fontSize(15)
+              .fontColor($r('app.color.text_primary'))
+              .layoutWeight(1)
+            Toggle({ type: ToggleType.Switch, isOn: this.pushEnabled })
+              .selectedColor($r('app.color.primary'))
+              .onChange((checked: boolean) => {
+                this.togglePush(checked);
+              })
+          }
+          .width('100%')
+          .height(52)
+          .padding({ left: 16, right: 16 })
+          .backgroundColor($r('app.color.card_background'))
+          Row() {
+            Text('会话结束提醒')
+              .fontSize(15)
+              .fontColor($r('app.color.text_primary'))
+              .layoutWeight(1)
+            Toggle({ type: ToggleType.Switch, isOn: this.pushSessionEnd })
+              .selectedColor($r('app.color.primary'))
+              .onChange((checked: boolean) => {
+                this.togglePushSessionEnd(checked);
+              })
+          }
+          .width('100%')
+          .height(52)
+          .padding({ left: 16, right: 16 })
+          .backgroundColor($r('app.color.card_background'))
+        }
+        .width('100%')
+        .borderRadius($r('app.float.card_corner_radius'))
+        .clip(true)
       }
 
       Column({ space: 8 }) {

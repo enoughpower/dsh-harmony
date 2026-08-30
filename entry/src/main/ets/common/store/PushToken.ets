@@ -6,6 +6,7 @@ import { hilog } from '@kit.PerformanceAnalysisKit';
 import { fileIo } from '@kit.CoreFileKit';
 import { util } from '@kit.ArkTS';
 import { ConnectionStore } from './ConnectionStore';
+import { AppPrefs } from './AppPrefs';
 import { UrlUtils } from '../utils/UrlUtils';
 
 const DOMAIN = 0x0000;
@@ -20,6 +21,11 @@ interface PushTokenRpc {
 }
 interface PushTokenPayload {
   'token': string;
+}
+interface PushSettingsPayload {
+  'pushEnabled': boolean;
+  'sessionEnd': boolean;
+  'interact': boolean;
 }
 
 /**
@@ -57,9 +63,15 @@ export class PushToken {
     }
   }
 
-  /** 启动时：取 token → 上报给电脑端推送器 */
+  /** 启动时：同步推送开关 → 取 token → 上报给电脑端推送器（总开关关则不上报 token） */
   static async ensureAndReport(context: common.Context): Promise<void> {
     try {
+      await PushToken.reportSettings(context);
+      const enabled = await AppPrefs.getBool(context, AppPrefs.KEY_PUSH_ENABLED, true);
+      if (!enabled) {
+        PushToken.logDebug(context, 'push disabled (master off), skip token report');
+        return;
+      }
       const token = await PushToken.getToken();
       PushToken.logDebug(context, 'getToken ok len=' + token.length);
       hilog.info(DOMAIN, TAG, 'push token obtained len=%{public}d', token.length);
@@ -69,6 +81,45 @@ export class PushToken {
       // 1000900012 = 推送未激活（未在 AGC 开通）；1000900010 = 应用身份非法（指纹/应用配置）
       PushToken.logDebug(context, 'getToken FAILED code=' + be.code + ' msg=' + be.message.slice(0, 120));
       hilog.warn(DOMAIN, TAG, 'getToken failed code=%{public}d msg=%{public}s', be.code, be.message);
+    }
+  }
+
+  /** 同步推送开关到电脑端推送器：POST /api/push.settings。 */
+  static async reportSettings(context: common.Context): Promise<void> {
+    try {
+      const store = new ConnectionStore();
+      const list = await store.loadAll(context);
+      if (list.length === 0) {
+        return;
+      }
+      if (UrlUtils.isTunnelHost(list[0].url)) {
+        return;
+      }
+      const host = store.pushHostOf(list);
+      const reportBase = host.length > 0 ? 'http://' + host + ':3082' : list[0].url.replace(/\/+$/, '');
+      const enabled = await AppPrefs.getBool(context, AppPrefs.KEY_PUSH_ENABLED, true);
+      const sessionEnd = await AppPrefs.getBool(context, AppPrefs.KEY_PUSH_SESSION_END, true);
+      const payload: PushSettingsPayload = { 'pushEnabled': enabled, 'sessionEnd': sessionEnd, 'interact': true };
+      const body = JSON.stringify({ 'type': 'client-request', 'rpcId': 'push-settings-' + Date.now(), 'method': 'push.settings', 'payload': payload });
+      const req = http.createHttp();
+      try {
+        const options: http.HttpRequestOptions = {
+          'method': http.RequestMethod.POST,
+          'header': { 'Content-Type': 'application/json' },
+          'extraData': body,
+          'connectTimeout': 5000,
+          'readTimeout': 5000
+        };
+        const resp: http.HttpResponse = await req.request(reportBase + '/api/push.settings', options);
+        hilog.info(DOMAIN, TAG, 'push.settings report code=%{public}d', resp.responseCode);
+      } catch (e) {
+        const be = e as BusinessError;
+        hilog.warn(DOMAIN, TAG, 'push.settings report failed %{public}s', be.message);
+      } finally {
+        req.destroy();
+      }
+    } catch (e) {
+      hilog.warn(DOMAIN, TAG, 'push.settings prep failed %{public}s', (e as Error).message);
     }
   }
 
