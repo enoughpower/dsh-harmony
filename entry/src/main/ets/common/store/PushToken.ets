@@ -99,7 +99,8 @@ export class PushToken {
       const reportBase = host.length > 0 ? 'http://' + host + ':3082' : list[0].url.replace(/\/+$/, '');
       const enabled = await AppPrefs.getBool(context, AppPrefs.KEY_PUSH_ENABLED, true);
       const sessionEnd = await AppPrefs.getBool(context, AppPrefs.KEY_PUSH_SESSION_END, true);
-      const payload: PushSettingsPayload = { 'pushEnabled': enabled, 'sessionEnd': sessionEnd, 'interact': true };
+      const interact = await AppPrefs.getBool(context, AppPrefs.KEY_PUSH_INTERACT, true);
+      const payload: PushSettingsPayload = { 'pushEnabled': enabled, 'sessionEnd': sessionEnd, 'interact': interact };
       const body = JSON.stringify({ 'type': 'client-request', 'rpcId': 'push-settings-' + Date.now(), 'method': 'push.settings', 'payload': payload });
       const req = http.createHttp();
       try {

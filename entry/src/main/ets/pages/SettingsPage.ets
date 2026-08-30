@@ -30,6 +30,7 @@ struct SettingsPage {
   @State autoConnect: boolean = true;
   @State pushEnabled: boolean = true;
   @State pushSessionEnd: boolean = true;
+  @State pushInteract: boolean = true;
   @State lanPin: string = AppPrefs.DEFAULT_LAN_PIN;
   @State scanning: boolean = false;
   @State discovered: DiscoveredService[] = [];
@@ -133,6 +134,10 @@ struct SettingsPage {
       this.pushSessionEnd = v;
     }).catch(() => {
     });
+    AppPrefs.getBool(ctx, AppPrefs.KEY_PUSH_INTERACT, true).then((v: boolean) => {
+      this.pushInteract = v;
+    }).catch(() => {
+    });
   }
 
   /** 总开关变化：本地保存 + 同步给电脑端推送器。 */
@@ -150,6 +155,16 @@ struct SettingsPage {
     this.pushSessionEnd = checked;
     const ctx = this.getUIContext().getHostContext() as common.UIAbilityContext;
     AppPrefs.setBool(ctx, AppPrefs.KEY_PUSH_SESSION_END, checked).catch(() => {
+    });
+    PushToken.reportSettings(ctx).catch(() => {
+    });
+  }
+
+  /** 需信息 / 需批准 开关变化。 */
+  private togglePushInteract(checked: boolean): void {
+    this.pushInteract = checked;
+    const ctx = this.getUIContext().getHostContext() as common.UIAbilityContext;
+    AppPrefs.setBool(ctx, AppPrefs.KEY_PUSH_INTERACT, checked).catch(() => {
     });
     PushToken.reportSettings(ctx).catch(() => {
     });
@@ -413,6 +428,21 @@ struct SettingsPage {
               .selectedColor($r('app.color.primary'))
               .onChange((checked: boolean) => {
                 this.togglePushSessionEnd(checked);
+              })
+          }
+          .width('100%')
+          .height(52)
+          .padding({ left: 16, right: 16 })
+          .backgroundColor($r('app.color.card_background'))
+          Row() {
+            Text('需信息 / 需批准')
+              .fontSize(15)
+              .fontColor($r('app.color.text_primary'))
+              .layoutWeight(1)
+            Toggle({ type: ToggleType.Switch, isOn: this.pushInteract })
+              .selectedColor($r('app.color.primary'))
+              .onChange((checked: boolean) => {
+                this.togglePushInteract(checked);
               })
           }
           .width('100%')

@@ -19,6 +19,8 @@ export class AppPrefs {
   static readonly KEY_PUSH_ENABLED: string = 'push_enabled';
   /** 会话结束提醒开关 */
   static readonly KEY_PUSH_SESSION_END: string = 'push_session_end';
+  /** 需信息 / 需批准 提醒开关 */
+  static readonly KEY_PUSH_INTERACT: string = 'push_interact';
 
   static async getBool(context: common.Context, key: string, def: boolean): Promise<boolean> {
     try {
