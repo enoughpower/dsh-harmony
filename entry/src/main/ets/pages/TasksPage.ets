@@ -37,6 +37,8 @@ struct TasksPage {
   @State searching: boolean = false;
   @State searchError: string = '';
   @State refreshing: boolean = false;
+  @State filter: string = 'all';
+  @State filteredTasks: TaskInfo[] = [];
   private store: ConnectionStore = new ConnectionStore();
 
   aboutToAppear(): void {
@@ -92,6 +94,7 @@ struct TasksPage {
       this.error = '';
     }
     this.tasks = r.tasks;
+    this.applyFilter();
     this.token = r.token;
     this.loading = false;
     if (this.token.length > 0) {
@@ -161,6 +164,34 @@ struct TasksPage {
       this.refreshTimer = -1;
       this.reload();
     }, 500);
+  }
+
+  private openDetailFor(sessionId: string): void {
+    for (const t of this.tasks) {
+      if (t.sessionId === sessionId) {
+        this.openDetail(t);
+        return;
+      }
+    }
+    // 搜索结果可能不在当前列表(归档等)，回退到工作台
+    this.openTask(this.baseUrl);
+  }
+
+  private openDetail(t: TaskInfo): void {
+    router.pushUrl({
+      url: 'pages/SessionDetailPage',
+      params: {
+        'sessionId': t.sessionId,
+        'title': t.title,
+        'objective': t.objective,
+        'phase': t.phase,
+        'running': String(t.running),
+        'turns': String(t.turns),
+        'steps': String(t.steps),
+        'updatedAt': String(t.updatedAt),
+        'url': this.baseUrl
+      }
+    });
   }
 
   private openTask(url: string): void {
@@ -252,7 +283,7 @@ struct TasksPage {
     .backgroundColor($r('app.color.card_background'))
     .borderRadius($r('app.float.card_corner_radius'))
     .onClick(() => {
-      this.openTask(this.baseUrl);
+      this.openDetailFor(t.sessionId);
     })
   }
 
@@ -311,6 +342,37 @@ struct TasksPage {
     }
   }
 
+  private filterTasks(list: TaskInfo[]): TaskInfo[] {
+    if (this.filter === 'running') {
+      return list.filter((t: TaskInfo) => t.running);
+    }
+    if (this.filter === 'paused') {
+      return list.filter((t: TaskInfo) => t.phase === 'paused');
+    }
+    if (this.filter === 'complete') {
+      return list.filter((t: TaskInfo) => t.phase === 'complete');
+    }
+    return list;
+  }
+
+  private applyFilter(): void {
+    this.filteredTasks = this.filterTasks(this.tasks);
+  }
+
+  @Builder
+  FilterChip(label: string, key: string) {
+    Text(label)
+      .fontSize(13)
+      .fontColor(this.filter === key ? '#FFFFFF' : $r('app.color.text_secondary'))
+      .backgroundColor(this.filter === key ? $r('app.color.primary') : $r('app.color.card_background'))
+      .padding({ left: 12, right: 12, top: 6, bottom: 6 })
+      .borderRadius(16)
+      .onClick(() => {
+        this.filter = key;
+        this.applyFilter();
+      })
+  }
+
   private doSearch(): void {
     if (this.searchTimer >= 0) {
       clearTimeout(this.searchTimer);
@@ -367,7 +429,7 @@ struct TasksPage {
     .backgroundColor($r('app.color.card_background'))
     .borderRadius($r('app.float.card_corner_radius'))
     .onClick(() => {
-      this.openTask(this.baseUrl);
+      this.openDetailFor(r.sessionId);
     })
   }
 
@@ -426,6 +488,14 @@ struct TasksPage {
             this.query = v;
             this.doSearch();
           })
+        Row({ space: 8 }) {
+          this.FilterChip('全部', 'all')
+          this.FilterChip('进行中', 'running')
+          this.FilterChip('已暂停', 'paused')
+          this.FilterChip('已完成', 'complete')
+        }
+        .width('100%')
+        .padding({ left: 4, right: 4 })
         if (this.loading) {
           Column() {
             LoadingProgress().width(28).height(28)
@@ -433,12 +503,12 @@ struct TasksPage {
           .width('100%').height(200).justifyContent(FlexAlign.Center)
         } else if (this.query.trim().length > 0) {
           this.SearchList()
-        } else if (this.tasks.length === 0) {
+        } else if (this.filteredTasks.length === 0) {
           this.Empty()
         } else {
           Refresh({ refreshing: this.refreshing, offset: 40 }) {
             List({ space: 12 }) {
-              ForEach(this.tasks, (t: TaskInfo) => {
+              ForEach(this.filteredTasks, (t: TaskInfo) => {
                 ListItem() {
                   this.TaskCard(t)
                 }

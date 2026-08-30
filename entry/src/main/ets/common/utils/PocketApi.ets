@@ -53,6 +53,45 @@ export interface ControlResult {
   error: string;
 }
 
+export interface SessionMessage {
+  role: string;
+  text: string;
+}
+
+export interface SessionHistoryResult {
+  messages: SessionMessage[];
+  error: string;
+}
+
+interface HistoryMsgTextPart {
+  type?: string;
+  text?: string;
+}
+interface HistoryMsg {
+  role?: string;
+  content?: HistoryMsgTextPart[] | string;
+}
+interface HistoryMsgData {
+  message?: HistoryMsg;
+}
+interface HistoryEvent {
+  type?: string;
+  data?: HistoryMsgData;
+}
+interface HistoryEntry {
+  event?: HistoryEvent;
+  seq?: number;
+}
+interface HistoryValue {
+  events?: HistoryEntry[];
+}
+interface HistoryInner {
+  value?: HistoryValue;
+}
+interface HistoryWire {
+  result?: HistoryInner;
+}
+
 export interface SearchResult {
   sessionId: string;
   snippet: string;
@@ -136,7 +175,7 @@ interface ClientRequestMsg {
   type: string;
   rpcId: string;
   method: string;
-  payload: Record<string, string>;
+  payload: Record<string, Object>;
 }
 
 /**
@@ -406,6 +445,85 @@ export class PocketApi {
       return { results, error: '' };
     } catch (e) {
       return { results: [], error: '请求异常: ' + (e as Error).message.slice(0, 60) };
+    } finally {
+      try {
+        request.destroy();
+      } catch (e) {
+      }
+    }
+  }
+
+  /** 拉取会话历史(最近消息，用于详情页进度/摘要)。 */
+  static async sessionHistory(base: string, pin: string, sessionId: string, maxMessages: number = 20): Promise<SessionHistoryResult> {
+    const b = base.replace(/\/+$/, '');
+    let token = '';
+    try {
+      const ck = webview.WebCookieManager.fetchCookieSync(b);
+      const m = ck.match(/dsh_pocket_token=([^;]+)/);
+      if (m !== null && m.length > 1) {
+        token = m[1].trim();
+      }
+    } catch (e) {
+    }
+    if (token.length === 0) {
+      const login = await PocketApi.login(b, pin);
+      if (!login.ok || login.token.length === 0) {
+        return { messages: [], error: '未登录且登录失败: ' + login.detail };
+      }
+      token = login.token;
+    }
+    const request = http.createHttp();
+    const body: ClientRequestMsg = {
+      'type': 'client-request',
+      'rpcId': 'dsh-harmony-hist',
+      'method': 'session.history',
+      'payload': { 'sessionId': sessionId, 'maxMessages': maxMessages }
+    };
+    try {
+      const resp = await request.request(b + '/api/session.history?token=' + encodeURIComponent(token), {
+        method: http.RequestMethod.POST,
+        header: { 'Content-Type': 'application/json' },
+        extraData: JSON.stringify(body),
+        connectTimeout: 8000,
+        readTimeout: 12000
+      });
+      if (resp.responseCode !== 200) {
+        return { messages: [], error: '服务返回 HTTP ' + String(resp.responseCode ?? 0) };
+      }
+      const text = String(resp.result ?? '');
+      const parsed = JSON.parse(text) as HistoryWire;
+      const events = parsed.result?.value?.events ?? [];
+      const messages: SessionMessage[] = [];
+      for (const en of events) {
+        const e = en.event;
+        if (e === undefined) {
+          continue;
+        }
+        if (e.type === 'assistant/message' || e.type === 'message' || e.type === 'user/message') {
+          const m = e.data?.message;
+          if (m !== undefined) {
+            const role = m.role ?? '';
+            let contentText = '';
+            if (typeof m.content === 'string') {
+              contentText = m.content;
+            } else if (Array.isArray(m.content)) {
+              const parts: string[] = [];
+              for (const p of m.content) {
+                if (p !== undefined && p.type === 'text' && typeof p.text === 'string') {
+                  parts.push(p.text);
+                }
+              }
+              contentText = parts.join(' ').trim();
+            }
+            if (contentText.length > 0) {
+              messages.push({ role: role, text: contentText });
+            }
+          }
+        }
+      }
+      return { messages, error: '' };
+    } catch (e) {
+      return { messages: [], error: '请求异常: ' + (e as Error).message.slice(0, 60) };
     } finally {
       try {
         request.destroy();
