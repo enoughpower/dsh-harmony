@@ -63,6 +63,11 @@ export interface SessionHistoryResult {
   error: string;
 }
 
+interface PromptContentPart {
+  type: string;
+  text: string;
+}
+
 interface HistoryMsgTextPart {
   type?: string;
   text?: string;
@@ -524,6 +529,63 @@ export class PocketApi {
       return { messages, error: '' };
     } catch (e) {
       return { messages: [], error: '请求异常: ' + (e as Error).message.slice(0, 60) };
+    } finally {
+      try {
+        request.destroy();
+      } catch (e) {
+      }
+    }
+  }
+
+  /** 向会话发送一条文本消息（session.prompt）。 */
+  static async promptSession(base: string, pin: string, sessionId: string, text: string): Promise<ControlResult> {
+    const b = base.replace(/\/+$/, '');
+    let token = '';
+    try {
+      const ck = webview.WebCookieManager.fetchCookieSync(b);
+      const m = ck.match(/dsh_pocket_token=([^;]+)/);
+      if (m !== null && m.length > 1) {
+        token = m[1].trim();
+      }
+    } catch (e) {
+    }
+    if (token.length === 0) {
+      const login = await PocketApi.login(b, pin);
+      if (!login.ok || login.token.length === 0) {
+        return { ok: false, error: '未登录且登录失败: ' + login.detail };
+      }
+      token = login.token;
+    }
+    const part: PromptContentPart = { 'type': 'text', 'text': text };
+    const content: PromptContentPart[] = [part];
+    const request = http.createHttp();
+    const body: ClientRequestMsg = {
+      'type': 'client-request',
+      'rpcId': 'dsh-harmony-prompt',
+      'method': 'session.prompt',
+      'payload': {
+        'sessionId': sessionId,
+        'mode': 'queue',
+        'content': content
+      }
+    };
+    try {
+      const resp = await request.request(b + '/api/session.prompt?token=' + encodeURIComponent(token), {
+        method: http.RequestMethod.POST,
+        header: { 'Content-Type': 'application/json' },
+        extraData: JSON.stringify(body),
+        connectTimeout: 8000,
+        readTimeout: 20000
+      });
+      if (resp.responseCode === 200) {
+        return { ok: true, error: '' };
+      }
+      if (resp.responseCode === 401 || resp.responseCode === 403) {
+        PocketApi.expectedToken = '';
+      }
+      return { ok: false, error: '服务返回 HTTP ' + String(resp.responseCode ?? 0) };
+    } catch (e) {
+      return { ok: false, error: '请求异常: ' + (e as Error).message.slice(0, 60) };
     } finally {
       try {
         request.destroy();

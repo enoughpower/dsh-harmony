@@ -28,6 +28,8 @@ struct SessionDetailPage {
   @State baseUrl: string = '';
   @State messages: SessionMessage[] = [];
   @State loadingMsg: boolean = false;
+  @State draft: string = '';
+  @State sending: boolean = false;
   @State statusBarH: number = 28;
   private store: ConnectionStore = new ConnectionStore();
 
@@ -236,6 +238,29 @@ struct SessionDetailPage {
           .layoutWeight(1)
           .scrollBar(BarState.Off)
         }
+
+        Row({ space: 8 }) {
+          TextInput({ text: this.draft, placeholder: '给 AI 发消息…' })
+            .layoutWeight(1)
+            .height(40)
+            .fontSize(14)
+            .padding({ left: 12, right: 12 })
+            .backgroundColor($r('app.color.card_background'))
+            .borderRadius(20)
+            .onChange((v: string) => {
+              this.draft = v;
+            })
+          Button('发送')
+            .height(40)
+            .fontSize(14)
+            .fontColor('#FFFFFF')
+            .backgroundColor($r('app.color.primary'))
+            .enabled(!this.sending)
+            .onClick(() => {
+              this.sendPrompt();
+            })
+        }
+        .width('100%')
       }
       .width('100%')
       .height('100%')
@@ -247,6 +272,26 @@ struct SessionDetailPage {
     .height('100%')
     .backgroundColor($r('app.color.page_background'))
     .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.TOP, SafeAreaEdge.BOTTOM])
+  }
+
+  private async sendPrompt(): Promise<void> {
+    const text = this.draft.trim();
+    if (text.length === 0 || this.sending) {
+      return;
+    }
+    this.sending = true;
+    const ctx = this.getUIContext().getHostContext() as common.UIAbilityContext;
+    const pin = await AppPrefs.getString(ctx, AppPrefs.KEY_LAN_PIN, AppPrefs.DEFAULT_LAN_PIN);
+    const r = await PocketApi.promptSession(this.baseUrl, pin, this.sessionId, text);
+    this.sending = false;
+    if (r.ok) {
+      this.draft = '';
+      this.messages = [];
+      this.loadHistory();
+      promptAction.showToast({ message: '已发送' });
+    } else {
+      promptAction.showToast({ message: '发送失败: ' + r.error });
+    }
   }
 
   private statusLabel(): string {
