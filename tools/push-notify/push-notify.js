@@ -2,10 +2,9 @@
 /**
  * DSH Harmony 电脑端推送服务（方案 B：独立进程，不改 dsh-pocket）
  *
- * 推送策略（仅三场景推送，其他一律不推）：
+ * 推送策略（仅两场景推送，其他一律不推）：
  *  1. 会话结束 → 推送汇报（完成/已结束 + 目标 + 轮/步统计）
- *  2. 异常/长时间无响应 → updatedAt 停滞超阈值且连续无响应 >5 次，推送 ⏰ 提醒
- *  3. 会话中途收集信息 → events.mux 事件流（打开即回放 pending question + 实时推送）
+ *  2. 会话中途收集信息 → events.mux 事件流（打开即回放 pending question + 实时推送）
  *
  * 发送通道：SENDER=test（默认，临时异常测试渠道）| huawei（华为 AGC，需手机 push token）
  * 发送节流：串行队列 + 3.1s 间隔（测试通道限流 3 秒 1 条）
@@ -140,13 +139,10 @@ function drainQueue() {
 // ---- dsh-pocket 会话轮询（仅三场景） ----
 let dshToken = '';
 const runningMap = new Map();   // sessionId -> true（曾运行）
-const stallMap = new Map();     // sessionId -> {count, notified}
 const sessionMeta = new Map();  // sessionId -> {title, objective}
 let baseline = false;
 let pollFailCount = 0;
 const POLL_MS = 5000;
-const STALL_MS = 120 * 1000;
-const STALL_LIMIT = 5;
 
 /** token 失效(harness 重启/过期) → 清空,下次 poll 重新登录 */
 function invalidateToken() {
@@ -213,7 +209,6 @@ async function poll() {
       // 场景1/2·结束：曾运行 -> 现在不运行，推送汇报
       if (runningMap.has(sid) && !it.running) {
         runningMap.delete(sid);
-        stallMap.delete(sid);
         const phase = s.goal?.goal?.phase || '';
         const done = (phase === 'complete');
         const summary = await sessionSummary(sid);
@@ -223,19 +218,6 @@ async function poll() {
         await sendCase(title + meta, summary ? head + '：' + summary : head, sid);
       } else if (it.running) {
         runningMap.set(sid, true);
-        // 场景2·超时：运行中但 updatedAt 停滞（连续 >5 次无响应）
-        const stallMs = it.updatedAt ? Date.now() - Number(it.updatedAt) : 0;
-        let st = stallMap.get(sid) || { count: 0, notified: false };
-        if (stallMs > STALL_MS) {
-          st.count += 1;
-          if (st.count > STALL_LIMIT && !st.notified) {
-            st.notified = true;
-            await sendCase(title, '⏰ 长时间无响应 · 已超过 ' + Math.round(stallMs / 1000) + 's（可能异常/卡住）', sid);
-          }
-        } else {
-          st.count = 0;
-        }
-        stallMap.set(sid, st);
       }
     }
     baseline = true;
