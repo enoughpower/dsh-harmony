@@ -90,7 +90,7 @@ struct SessionDetailPage {
     }
     const ctx = this.getUIContext().getHostContext() as common.UIAbilityContext;
     const pin = await AppPrefs.getString(ctx, AppPrefs.KEY_LAN_PIN, AppPrefs.DEFAULT_LAN_PIN);
-    const r = await PocketApi.sessionHistory(this.baseUrl, pin, this.sessionId, 12);
+    const r = await PocketApi.sessionHistory(this.baseUrl, pin, this.sessionId, 50);
     if (r.messages.length > 0) {
       this.messages = r.messages;
     }
