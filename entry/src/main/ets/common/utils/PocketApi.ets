@@ -1,6 +1,7 @@
 import { http } from '@kit.NetworkKit';
 import { webview } from '@kit.ArkWeb';
 import { hilog } from '@kit.PerformanceAnalysisKit';
+import { util } from '@kit.ArkTS';
 
 const DOMAIN = 0x0000;
 const TAG = 'DSHHarmony';
@@ -68,6 +69,11 @@ export interface SessionMessage {
   images: SessionImage[];
 }
 
+interface FoldedMsg {
+  text: string;
+  images: SessionImage[];
+}
+
 export interface SessionHistoryResult {
   messages: SessionMessage[];
   error: string;
@@ -98,31 +104,22 @@ interface HistoryMsgTextPart {
   text?: string;
   attachment?: HistoryMsgAttachment;
 }
-interface HistoryMsg {
+interface HistoryRecordDataMsg {
   role?: string;
   content?: HistoryMsgTextPart[] | string;
 }
-interface HistoryMsgData {
-  message?: HistoryMsg;
+interface HistoryRecordData {
   role?: string;
   content?: HistoryMsgTextPart[] | string;
+  message?: HistoryRecordDataMsg;
 }
-interface HistoryEvent {
+interface HistoryRecordEvent {
   type?: string;
-  data?: HistoryMsgData;
+  data?: HistoryRecordData;
 }
-interface HistoryEntry {
-  event?: HistoryEvent;
-  seq?: number;
-}
-interface HistoryValue {
-  events?: HistoryEntry[];
-}
-interface HistoryInner {
-  value?: HistoryValue;
-}
-interface HistoryWire {
-  result?: HistoryInner;
+interface HistoryRecord {
+  type?: string;
+  event?: HistoryRecordEvent;
 }
 
 export interface SearchResult {
@@ -138,15 +135,6 @@ export interface SearchResultSet {
 interface SearchItemValue {
   sessionId?: string;
   snippet?: string;
-}
-interface SearchValue {
-  items?: SearchItemValue[];
-}
-interface SearchResultInner {
-  value?: SearchValue;
-}
-interface SearchWire {
-  result?: SearchResultInner;
 }
 
 /** session.list 响应结构（仅声明用到的字段） */
@@ -184,16 +172,6 @@ interface SessionListValue {
   items?: SessionItem[];
 }
 
-interface WorkspaceListArchived {
-  archivedSessionIds?: string[];
-}
-interface WorkspaceListInner {
-  value?: WorkspaceListArchived;
-}
-interface WorkspaceListResult {
-  result?: WorkspaceListInner;
-}
-
 interface SessionListResultInner {
   ok?: boolean;
   value?: SessionListValue;
@@ -201,6 +179,45 @@ interface SessionListResultInner {
 
 interface SessionListResult {
   result?: SessionListResultInner;
+}
+
+/** session/search 响应 */
+interface SearchValue {
+  items?: SearchItemValue[];
+}
+interface SearchResultBody {
+  value?: SearchValue;
+}
+interface SearchResultWire {
+  result?: SearchResultBody;
+}
+
+/** session/page 响应（历史记录） */
+interface PageValue {
+  records?: HistoryRecord[];
+}
+interface PageResultBody {
+  ok?: boolean;
+  value?: PageValue;
+}
+interface PageResultWire {
+  result?: PageResultBody;
+}
+
+/** session/attachment 响应 */
+interface AttachmentMeta {
+  mediaType?: string;
+}
+interface AttachmentBody {
+  data?: string;
+  attachment?: AttachmentMeta;
+}
+interface AttachmentResultBody {
+  ok?: boolean;
+  value?: AttachmentBody;
+}
+interface AttachmentResultWire {
+  result?: AttachmentResultBody;
 }
 
 /** client-request RPC 消息体 */
@@ -212,124 +229,111 @@ interface ClientRequestMsg {
 }
 
 /**
- * dsh-pocket HTTP 通道封装：LAN PIN 登录 + DSH RPC 调用。
- * 认证走 /pocket-login 拿到的「期望令牌」（sha256(token:sessionKey)），
- * 后续请求以 ?token= 查询参数携带（与网页 Cookie 等价，App 免 cookie jar）。
+ * dsh-pocket HTTP 通道封装。
+ *
+ * 适配新版 dsh web / dsh-pocket（typert gateway + issue #77 会话 cookie）：
+ *   - 代理层（dsh-pocket PIN）：以 ?token=<明文 PIN> 认证；
+ *   - DSH web 层（issue #77）：转发 ArkWeb 已登录的 dsh-auth-* 会话 cookie；
+ *   - RPC：POST /api/<namespace>/<method>（斜杠）+ payload:{args:{...}}。
  */
+/** 鉴权参数：tokenQuery=明文 PIN；cookie=dsh-auth-* 会话 cookie */
+interface AuthParam {
+  tokenQuery: string;
+  cookie: string;
+}
+
+/** RPC 调用结果 */
+interface RpcResult {
+  code: number;
+  text: string;
+}
+
+/** DSH 会话地址（session/page 等用） */
+interface SessionAddress {
+  kind: string;
+  sessionId: string;
+}
+
 export class PocketApi {
-  /** 进程内缓存的期望令牌（30 天有效；dsh-pocket 重启后失效，届时重新登录） */
+  /** 进程内缓存的期望令牌（旧哈希模型，新版不再使用；保留向下兼容） */
   private static expectedToken: string = '';
 
-  /**
-   * LAN PIN 登录，返回期望令牌（失败返回空串）。
-   * 成功时 Set-Cookie: dsh_pocket_token=<期望令牌>；也可用于 ?token= 参数。
-   */
-  private static async login(base: string, pin: string): Promise<LoginResult> {
-    if (PocketApi.expectedToken.length > 0) {
-      const ok: LoginResult = { ok: true, token: PocketApi.expectedToken, detail: '' };
-      return ok;
-    }
+  /** 组装请求鉴权：tokenQuery=明文 PIN（过代理层）；cookie=dsh-auth-*（过 DSH web 层） */
+  private static auth(base: string, pin: string): AuthParam {
     const b = base.replace(/\/+$/, '');
-    const request = http.createHttp();
+    let cookie = '';
     try {
-      // maxRedirects=0：关闭自动跟随，保留 302 的 Set-Cookie（含期望令牌）
-      const loginOptions: http.HttpRequestOptions = {
-        method: http.RequestMethod.POST,
-        header: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        extraData: 'token=' + encodeURIComponent(pin),
-        maxRedirects: 0,
-        connectTimeout: 8000,
-        readTimeout: 8000
-      };
-      const resp = await request.request(b + '/pocket-login', loginOptions);
-      const value = PocketApi.extractToken(resp);
-      if (value.length > 0) {
-        PocketApi.expectedToken = value;
-        hilog.info(DOMAIN, TAG, 'pocket login ok');
-        const ok: LoginResult = { ok: true, token: value, detail: '' };
-        return ok;
+      const ck = webview.WebCookieManager.fetchCookieSync(b);
+      const keep: string[] = [];
+      for (const part of ck.split(';')) {
+        const p = part.trim();
+        if (p.length > 0 && p.startsWith('dsh-auth-')) {
+          keep.push(p);
+        }
       }
-      hilog.warn(DOMAIN, TAG, 'pocket login: token not found, code=%{public}d', resp.responseCode ?? 0);
-      const bad: LoginResult = { ok: false, token: '', detail: 'no-token code=' + String(resp.responseCode ?? 0) };
-      return bad;
+      cookie = keep.join('; ');
     } catch (e) {
-      const em = e as BusinessError;
-      hilog.warn(DOMAIN, TAG, 'pocket login failed: code=%{public}d msg=%{public}s', em.code, em.message);
-      const bad: LoginResult = { ok: false, token: '', detail: 'code=' + String(em.code ?? -1) + ' ' + (em.message ?? '').slice(0, 80) };
-      return bad;
-    } finally {
+    }
+    return { tokenQuery: encodeURIComponent(pin), cookie };
+  }
+
+  /** 发起一次新协议 RPC：POST /api/<endpoint>?token=... 携带 dsh-auth cookie。 */
+  private static async rpc(
+    base: string,
+    pin: string,
+    endpoint: string,
+    rpcId: string,
+    field: string,
+    args: Record<string, Object>,
+    readTimeout: number = 12000,
+  ): Promise<RpcResult> {
+    const b = base.replace(/\/+$/, '');
+    const auth = PocketApi.auth(b, pin);
+    const request = http.createHttp();
+    const argsWrap: Record<string, Object> = {};
+    argsWrap[field] = args;
+    const body: ClientRequestMsg = {
+      'type': 'client-request',
+      'rpcId': rpcId,
+      'method': endpoint,
+      'payload': { 'args': argsWrap }
+    };
+    try {
+      const header: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (auth.cookie.length > 0) {
+        header['Cookie'] = auth.cookie;
+      }
+      const resp = await request.request(b + '/api/' + endpoint + '?token=' + auth.tokenQuery, {
+        method: http.RequestMethod.POST,
+        header: header,
+        extraData: JSON.stringify(body),
+        connectTimeout: 8000,
+        readTimeout: readTimeout
+      });
       try {
         request.destroy();
       } catch (e) {
       }
-    }
-  }
-
-  /** 从响应提取期望令牌：优先 cookies，兜底 set-cookie 头 */
-  private static extractToken(resp: http.HttpResponse): string {
-    const cookies = resp.cookies ?? [];
-    for (const c of cookies) {
-      if (c.startsWith('dsh_pocket_token=')) {
-        const v = c.substring('dsh_pocket_token='.length).split(';')[0].trim();
-        if (v.length > 0) {
-          return v;
-        }
-      }
-    }
-    try {
-      const header = resp.header as Record<string, string>;
-      const raw = header['set-cookie'] ?? '';
-      const m = raw.match(/dsh_pocket_token=([^;]+)/);
-      if (m !== null && m.length > 1) {
-        return m[1].trim();
-      }
+      return { code: resp.responseCode ?? 0, text: String(resp.result ?? '') };
     } catch (e) {
+      try {
+        request.destroy();
+      } catch (e2) {
+      }
+      const em = e as BusinessError;
+      return { code: em.code ?? -1, text: '请求异常: ' + (em.message ?? '').slice(0, 60) };
     }
-    return '';
   }
 
-  /**
-   * 查询最新会话摘要。
-   * @param base dsh-pocket 地址（如 http://192.168.5.13:3081）
-   * @param pin LAN PIN（默认 11111111）
-   * @returns 最新会话信息；失败返回 null
-   */
+  /** 查询最新会话摘要。基于 ArkWeb 已登录会话（dsh-auth cookie）+ 明文 PIN。 */
   static async latestSession(base: string, pin: string): Promise<SessionQueryResult> {
     const b = base.replace(/\/+$/, '');
-    // 主路：读取 Web 组件的登录 Cookie（手机网页登录过 dsh-pocket 即有）
-    let token = '';
-    try {
-      const ck = webview.WebCookieManager.fetchCookieSync(b);
-      const m = ck.match(/dsh_pocket_token=([^;]+)/);
-      if (m !== null && m.length > 1) {
-        token = m[1].trim();
-      }
-    } catch (e) {
-    }
-    if (token.length === 0) {
-      // 兜底：PIN 登录（302 重定向受 http 库限制时输出 detail 供排查）
-      const login = await PocketApi.login(b, pin);
-      if (!login.ok || login.token.length === 0) {
-        return { info: null, error: '未登录且登录失败: ' + login.detail + '（请先打开连接网页并输入 PIN）', token: '' };
-      }
-      token = login.token;
-    }
-    return PocketApi.querySession(b, token);
+    return PocketApi.querySession(b, pin);
   }
 
-  /** 获取当前可用的 dsh-pocket 令牌（优先 Web 组件 Cookie，兜底 PIN 登录），供 WS 订阅等使用。 */
+  /** 获取可用的 dsh-pocket 认证（供 WS 订阅等场景复用）：返回明文 PIN。 */
   static async getToken(base: string, pin: string): Promise<string> {
-    const b = base.replace(/\/+$/, '');
-    try {
-      const ck = webview.WebCookieManager.fetchCookieSync(b);
-      const m = ck.match(/dsh_pocket_token=([^;]+)/);
-      if (m !== null && m.length > 1) {
-        return m[1].trim();
-      }
-    } catch (e) {
-    }
-    const login = await PocketApi.login(b, pin);
-    return login.ok ? login.token : '';
+    return pin;
   }
 
   /** 按 sessionId 获取单个会话最新 TaskInfo。 */
@@ -343,60 +347,31 @@ export class PocketApi {
     return null;
   }
 
-  /** 查询会话任务列表（session.list 全部项转 TaskInfo） */
+  /** 查询会话任务列表（session/list 全量项转 TaskInfo） */
   static async listSessions(base: string, pin: string): Promise<TaskListResult> {
     const b = base.replace(/\/+$/, '');
-    let token = '';
-    try {
-      const ck = webview.WebCookieManager.fetchCookieSync(b);
-      const m = ck.match(/dsh_pocket_token=([^;]+)/);
-      if (m !== null && m.length > 1) {
-        token = m[1].trim();
-      }
-    } catch (e) {
-    }
-    if (token.length === 0) {
-      const login = await PocketApi.login(b, pin);
-      if (!login.ok || login.token.length === 0) {
-        return { tasks: [], error: '未登录且登录失败: ' + login.detail, token: '' };
-      }
-      token = login.token;
-    }
-    return PocketApi.queryList(b, token);
+    return PocketApi.queryList(b, pin);
   }
 
-  /** 带令牌查询会话列表 */
-  private static async queryList(b: string, token: string): Promise<TaskListResult> {
-    const request = http.createHttp();
-    const body: ClientRequestMsg = {
-      'type': 'client-request',
-      'rpcId': 'dsh-harmony-tasklist',
-      'method': 'session.list',
-      'payload': {}
-    };
+  /** 带 PIN 查询最新会话（服务卡片等外部场景直接使用：走明文 PIN + dsh-auth cookie） */
+  static async queryWithToken(base: string, pin: string): Promise<SessionQueryResult> {
+    return PocketApi.querySession(base.replace(/\/+$/, ''), pin);
+  }
+
+  private static async queryList(b: string, pin: string): Promise<TaskListResult> {
+    const r = await PocketApi.rpc(b, pin, 'session/list', 'dsh-harmony-tasklist', '_request', {}, 12000);
+    if (r.code !== 200) {
+      return { tasks: [], error: '服务返回 HTTP ' + String(r.code) + (r.text.startsWith('请求异常') ? ' ' + r.text : ''), token: pin };
+    }
+    if (r.text.startsWith('请求异常')) {
+      return { tasks: [], error: r.text, token: pin };
+    }
     try {
-      const resp = await request.request(b + '/api/session.list?token=' + encodeURIComponent(token), {
-        method: http.RequestMethod.POST,
-        header: { 'Content-Type': 'application/json' },
-        extraData: JSON.stringify(body),
-        connectTimeout: 8000,
-        readTimeout: 12000
-      });
-      if (resp.responseCode !== 200) {
-        if (resp.responseCode === 401 || resp.responseCode === 403) {
-          PocketApi.expectedToken = '';
-        }
-        return { tasks: [], error: '服务返回 HTTP ' + String(resp.responseCode ?? 0), token: token };
-      }
-      const text = String(resp.result ?? '');
-      const parsed = JSON.parse(text) as SessionListResult;
+      const parsed = JSON.parse(r.text) as SessionListResult;
       const items = parsed.result?.value?.items ?? [];
-      // 隐藏空白(未使用)会话 & 归档会话
-      const archived = await PocketApi.queryArchivedIds(b, token);
       const tasks: TaskInfo[] = [];
       for (const it of items) {
         if (it.blank === true) continue;
-        if (it.sessionId !== undefined && it.sessionId.length > 0 && archived.indexOf(it.sessionId) >= 0) continue;
         const stats = it.projections?.values?.sessionStats;
         tasks.push({
           sessionId: it.sessionId ?? '',
@@ -409,411 +384,184 @@ export class PocketApi {
           objective: it.projections?.values?.goal?.goal?.objective ?? ''
         });
       }
-      return { tasks, error: '', token: token };
+      return { tasks, error: '', token: pin };
     } catch (e) {
-      return { tasks: [], error: '请求异常: ' + (e as Error).message.slice(0, 60), token: token };
-    } finally {
-      try {
-        request.destroy();
-      } catch (e) {
-      }
+      return { tasks: [], error: '解析异常: ' + (e as Error).message.slice(0, 60), token: pin };
     }
   }
 
-  /** 查询归档会话 id 集合（workspace.list 的 archivedSessionIds），用于过滤任务列表 */
-  private static async queryArchivedIds(b: string, token: string): Promise<string[]> {
-    const request = http.createHttp();
-    const body: ClientRequestMsg = {
-      'type': 'client-request',
-      'rpcId': 'dsh-harmony-archived',
-      'method': 'workspace.list',
-      'payload': {}
-    };
-    try {
-      const resp = await request.request(b + '/api/workspace.list?token=' + encodeURIComponent(token), {
-        method: http.RequestMethod.POST,
-        header: { 'Content-Type': 'application/json' },
-        extraData: JSON.stringify(body),
-        connectTimeout: 8000,
-        readTimeout: 12000
-      });
-      if (resp.responseCode !== 200) {
-        return [];
-      }
-      const text = String(resp.result ?? '');
-      const parsed = JSON.parse(text) as WorkspaceListResult;
-      return parsed.result?.value?.archivedSessionIds ?? [];
-    } catch (e) {
-      return [];
-    } finally {
-      try {
-        request.destroy();
-      } catch (e) {
-      }
-    }
-  }
-
-  /** 搜索会话（session.search）。返回匹配的 sessionId + 片段。 */
+  /** 搜索会话（session/search）。 */
   static async searchSessions(base: string, pin: string, query: string): Promise<SearchResultSet> {
     const b = base.replace(/\/+$/, '');
-    let token = '';
-    try {
-      const ck = webview.WebCookieManager.fetchCookieSync(b);
-      const m = ck.match(/dsh_pocket_token=([^;]+)/);
-      if (m !== null && m.length > 1) {
-        token = m[1].trim();
-      }
-    } catch (e) {
+    const r = await PocketApi.rpc(b, pin, 'session/search', 'dsh-harmony-search', 'request', { 'query': query }, 12000);
+    if (r.code !== 200) {
+      return { results: [], error: '服务返回 HTTP ' + String(r.code) + (r.text.startsWith('请求异常') ? ' ' + r.text : '') };
     }
-    if (token.length === 0) {
-      const login = await PocketApi.login(b, pin);
-      if (!login.ok || login.token.length === 0) {
-        return { results: [], error: '未登录且登录失败: ' + login.detail };
-      }
-      token = login.token;
+    if (r.text.startsWith('请求异常')) {
+      return { results: [], error: r.text };
     }
-    const request = http.createHttp();
-    const body: ClientRequestMsg = {
-      'type': 'client-request',
-      'rpcId': 'dsh-harmony-search',
-      'method': 'session.search',
-      'payload': { 'query': query }
-    };
     try {
-      const resp = await request.request(b + '/api/session.search?token=' + encodeURIComponent(token), {
-        method: http.RequestMethod.POST,
-        header: { 'Content-Type': 'application/json' },
-        extraData: JSON.stringify(body),
-        connectTimeout: 8000,
-        readTimeout: 12000
-      });
-      if (resp.responseCode !== 200) {
-        if (resp.responseCode === 401 || resp.responseCode === 403) {
-          PocketApi.expectedToken = '';
-        }
-        return { results: [], error: '服务返回 HTTP ' + String(resp.responseCode ?? 0) };
-      }
-      const text = String(resp.result ?? '');
-      const parsed = JSON.parse(text) as SearchWire;
+      const parsed = JSON.parse(r.text) as SearchResultWire;
       const items = parsed.result?.value?.items ?? [];
       const results: SearchResult[] = [];
       for (const it of items) {
-        const sr: SearchResult = { sessionId: it.sessionId ?? '', snippet: it.snippet ?? '' };
-        results.push(sr);
+        results.push({ sessionId: it.sessionId ?? '', snippet: it.snippet ?? '' });
       }
       return { results, error: '' };
     } catch (e) {
-      return { results: [], error: '请求异常: ' + (e as Error).message.slice(0, 60) };
-    } finally {
-      try {
-        request.destroy();
-      } catch (e) {
-      }
+      return { results: [], error: '解析异常: ' + (e as Error).message.slice(0, 60) };
     }
   }
 
-  /** 拉取会话历史(最近消息，用于详情页进度/摘要)。 */
+  /** 拉取会话历史(最近消息，用于详情页进度/摘要)。走 session/page 新协议。 */
   static async sessionHistory(base: string, pin: string, sessionId: string, maxMessages: number = 20): Promise<SessionHistoryResult> {
     const b = base.replace(/\/+$/, '');
-    let token = '';
-    try {
-      const ck = webview.WebCookieManager.fetchCookieSync(b);
-      const m = ck.match(/dsh_pocket_token=([^;]+)/);
-      if (m !== null && m.length > 1) {
-        token = m[1].trim();
-      }
-    } catch (e) {
-    }
-    if (token.length === 0) {
-      const login = await PocketApi.login(b, pin);
-      if (!login.ok || login.token.length === 0) {
-        return { messages: [], error: '未登录且登录失败: ' + login.detail };
-      }
-      token = login.token;
-    }
-    const request = http.createHttp();
-    const body: ClientRequestMsg = {
-      'type': 'client-request',
-      'rpcId': 'dsh-harmony-hist',
-      'method': 'session.history',
-      'payload': { 'sessionId': sessionId, 'maxMessages': maxMessages }
+    const addr: SessionAddress = { 'kind': 'session', 'sessionId': sessionId };
+    const args: Record<string, Object> = {
+      'address': addr,
+      'throughSeq': 9007199254740991,
+      'maxMessages': maxMessages
     };
-    try {
-      const resp = await request.request(b + '/api/session.history?token=' + encodeURIComponent(token), {
-        method: http.RequestMethod.POST,
-        header: { 'Content-Type': 'application/json' },
-        extraData: JSON.stringify(body),
-        connectTimeout: 8000,
-        readTimeout: 12000
-      });
-      if (resp.responseCode !== 200) {
-        return { messages: [], error: '服务返回 HTTP ' + String(resp.responseCode ?? 0) };
+    let r = await PocketApi.rpc(b, pin, 'session/page', 'dsh-harmony-hist', 'request', args, 12000);
+    if (r.code === 200) {
+      const m = r.text.match(/past cursor (\d+)/);
+      if (m !== null && m.length > 1) {
+        args['throughSeq'] = Number(m[1]);
+        r = await PocketApi.rpc(b, pin, 'session/page', 'dsh-harmony-hist', 'request', args, 12000);
       }
-      const text = String(resp.result ?? '');
-      const parsed = JSON.parse(text) as HistoryWire;
-      const events = parsed.result?.value?.events ?? [];
+    }
+    if (r.code !== 200) {
+      return { messages: [], error: '服务返回 HTTP ' + String(r.code) + (r.text.startsWith('请求异常') ? ' ' + r.text : '') };
+    }
+    if (r.text.startsWith('请求异常')) {
+      return { messages: [], error: r.text };
+    }
+    try {
+      const parsed = JSON.parse(r.text) as PageResultWire;
+      const records = parsed.result?.value?.records ?? [];
       const messages: SessionMessage[] = [];
-      for (const en of events) {
-        const e = en.event;
-        if (e === undefined) {
-          continue;
-        }
-        // 只取真正的用户消息（user/message，输入框内容）与助手消息（assistant/message），
-        // 不把 assistant/chunk（流式片段）、tool/result、user/prompt、user/transcription 当会话消息。
-        if (e.type === 'user/message' || e.type === 'assistant/message') {
-          // assistant/message 的消息体在 data.message；user/message 的消息体（role+content）直接在 data 上
-          const data: HistoryMsgData | undefined = e.data;
-          if (data !== undefined) {
-            const nested = data.message !== undefined;
-            const role = (nested ? data.message?.role : data.role) ?? '';
-            const content = nested ? data.message?.content : data.content;
-            let contentText = '';
-            const images: SessionImage[] = [];
-            if (typeof content === 'string') {
-              contentText = content;
-            } else if (Array.isArray(content)) {
-              const parts: string[] = [];
-              for (const p of content) {
-                if (p !== undefined && p.type === 'text' && typeof p.text === 'string') {
-                  parts.push(p.text);
-                } else if (p !== undefined && p.type === 'image' && p.attachment !== undefined) {
-                  const att = p.attachment;
-                  const aid = att.attachmentId ?? '';
-                  if (aid.length > 0) {
-                    images.push({ 'attachmentId': aid, 'mediaType': att.mediaType ?? '', 'name': att.name ?? '' });
-                  }
-                }
+      const fold = (content: HistoryMsgTextPart[] | string | undefined): FoldedMsg => {
+        let contentText = '';
+        const images: SessionImage[] = [];
+        if (typeof content === 'string') {
+          contentText = content;
+        } else if (Array.isArray(content)) {
+          const parts: string[] = [];
+          for (const p of content) {
+            if (p !== undefined && p.type === 'text' && typeof p.text === 'string') {
+              parts.push(p.text);
+            } else if (p !== undefined && p.type === 'image' && p.attachment !== undefined) {
+              const att = p.attachment;
+              const aid = att.attachmentId ?? '';
+              if (aid.length > 0) {
+                images.push({ 'attachmentId': aid, 'mediaType': att.mediaType ?? '', 'name': att.name ?? '' });
               }
-              contentText = parts.join(' ').trim();
-            }
-            if (contentText.length > 0 || images.length > 0) {
-              messages.push({ role: role, text: contentText, images: images });
             }
           }
+          contentText = parts.join(' ').trim();
+        }
+        return { text: contentText, images: images };
+      };
+      for (const rec of records) {
+        const ev = rec.event;
+        if (ev === undefined) continue;
+        if (ev.type !== 'user/message' && ev.type !== 'assistant/message') continue;
+        const data = ev.data;
+        if (data === undefined) continue;
+        let role = data.role ?? '';
+        let content: HistoryMsgTextPart[] | string | undefined = data.content;
+        if (ev.type === 'assistant/message' && data.message !== undefined) {
+          role = data.message.role ?? role;
+          content = data.message.content;
+        }
+        const h = fold(content);
+        if (h.text.length > 0 || h.images.length > 0) {
+          messages.push({ role: role, text: h.text, images: h.images });
         }
       }
       return { messages, error: '' };
     } catch (e) {
-      return { messages: [], error: '请求异常: ' + (e as Error).message.slice(0, 60) };
-    } finally {
-      try {
-        request.destroy();
-      } catch (e) {
-      }
+      return { messages: [], error: '解析异常: ' + (e as Error).message.slice(0, 60) };
     }
   }
 
-  /** 向会话发送一条文本消息（session.prompt）。 */
+  /** 向会话发送一条文本消息（session/prompt）。 */
   static async promptSession(base: string, pin: string, sessionId: string, content: PromptContentPart[]): Promise<ControlResult> {
     const b = base.replace(/\/+$/, '');
-    let token = '';
-    try {
-      const ck = webview.WebCookieManager.fetchCookieSync(b);
-      const m = ck.match(/dsh_pocket_token=([^;]+)/);
-      if (m !== null && m.length > 1) {
-        token = m[1].trim();
-      }
-    } catch (e) {
-    }
-    if (token.length === 0) {
-      const login = await PocketApi.login(b, pin);
-      if (!login.ok || login.token.length === 0) {
-        return { ok: false, error: '未登录且登录失败: ' + login.detail };
-      }
-      token = login.token;
-    }
-    const request = http.createHttp();
-    const body: ClientRequestMsg = {
-      'type': 'client-request',
-      'rpcId': 'dsh-harmony-prompt',
-      'method': 'session.prompt',
-      'payload': {
-        'sessionId': sessionId,
-        'mode': 'queue',
-        'content': content
-      }
+    const requestId = 'dsh-harmony-' + util.generateRandomUUID();
+    const args: Record<string, Object> = {
+      'requestId': requestId,
+      'sessionId': sessionId,
+      'mode': 'queue',
+      'content': content
     };
-    try {
-      const resp = await request.request(b + '/api/session.prompt?token=' + encodeURIComponent(token), {
-        method: http.RequestMethod.POST,
-        header: { 'Content-Type': 'application/json' },
-        extraData: JSON.stringify(body),
-        connectTimeout: 8000,
-        readTimeout: 20000
-      });
-      if (resp.responseCode === 200) {
-        return { ok: true, error: '' };
-      }
-      if (resp.responseCode === 401 || resp.responseCode === 403) {
-        PocketApi.expectedToken = '';
-      }
-      return { ok: false, error: '服务返回 HTTP ' + String(resp.responseCode ?? 0) };
-    } catch (e) {
-      return { ok: false, error: '请求异常: ' + (e as Error).message.slice(0, 60) };
-    } finally {
-      try {
-        request.destroy();
-      } catch (e) {
-      }
+    const r = await PocketApi.rpc(b, pin, 'session/prompt', 'dsh-harmony-prompt', 'request', args, 20000);
+    if (r.code === 200) {
+      return { ok: true, error: '' };
     }
+    return { ok: false, error: '服务返回 HTTP ' + String(r.code) + (r.text.startsWith('请求异常') ? ' ' + r.text : '') };
   }
 
-  /** 按 attachmentId 拉取消息中的图片（session.attachment），返回 base64 data。 */
+  /** 按 attachmentId 拉取消息中的图片（session/attachment），返回 base64 data。 */
   static async fetchSessionAttachment(base: string, pin: string, sessionId: string, attachmentId: string): Promise<AttachmentResult> {
     const b = base.replace(/\/+$/, '');
-    let token = '';
-    try {
-      const ck = webview.WebCookieManager.fetchCookieSync(b);
-      const m = ck.match(/dsh_pocket_token=([^;]+)/);
-      if (m !== null && m.length > 1) {
-        token = m[1].trim();
-      }
-    } catch (e) {
-    }
-    if (token.length === 0) {
-      const login = await PocketApi.login(b, pin);
-      if (!login.ok || login.token.length === 0) {
-        return { ok: false, data: '', mediaType: '', error: '未登录且登录失败: ' + login.detail };
-      }
-      token = login.token;
-    }
-    const request = http.createHttp();
-    const body: ClientRequestMsg = {
-      'type': 'client-request',
-      'rpcId': 'dsh-harmony-attachment',
-      'method': 'session.attachment',
-      'payload': {
-        'sessionId': sessionId,
-        'attachmentId': attachmentId
-      }
+    const args: Record<string, Object> = {
+      'sessionId': sessionId,
+      'attachmentId': attachmentId
     };
+    const r = await PocketApi.rpc(b, pin, 'session/attachment', 'dsh-harmony-attachment', 'request', args, 30000);
+    if (r.code !== 200) {
+      return { ok: false, data: '', mediaType: '', error: '服务返回 HTTP ' + String(r.code) + (r.text.startsWith('请求异常') ? ' ' + r.text : '') };
+    }
+    if (r.text.startsWith('请求异常')) {
+      return { ok: false, data: '', mediaType: '', error: r.text };
+    }
     try {
-      const resp = await request.request(b + '/api/session.attachment?token=' + encodeURIComponent(token), {
-        method: http.RequestMethod.POST,
-        header: { 'Content-Type': 'application/json' },
-        extraData: JSON.stringify(body),
-        connectTimeout: 8000,
-        readTimeout: 30000
-      });
-      if (resp.responseCode !== 200) {
-        if (resp.responseCode === 401 || resp.responseCode === 403) {
-          PocketApi.expectedToken = '';
-        }
-        return { ok: false, data: '', mediaType: '', error: '服务返回 HTTP ' + String(resp.responseCode ?? 0) };
-      }
-      const parsed = JSON.parse(String(resp.result ?? '')) as Record<string, Object>;
-      const inner = parsed['result'] as Record<string, Object> | undefined;
-      const value = inner?.['value'] as Record<string, Object> | undefined;
-      const d = value?.['data'];
-      const att = value?.['attachment'] as Record<string, Object> | undefined;
-      const media = att?.['mediaType'];
+      const parsed = JSON.parse(r.text) as AttachmentResultWire;
+      const inner = parsed.result?.value;
+      const d = inner?.data;
+      const media = inner?.attachment?.mediaType;
       const dataStr = typeof d === 'string' ? d : '';
       return { ok: dataStr.length > 0, data: dataStr, mediaType: typeof media === 'string' ? media : '', error: dataStr.length > 0 ? '' : '图片数据为空' };
     } catch (e) {
-      return { ok: false, data: '', mediaType: '', error: '请求异常: ' + (e as Error).message.slice(0, 60) };
-    } finally {
-      try {
-        request.destroy();
-      } catch (e) {
-      }
+      return { ok: false, data: '', mediaType: '', error: '解析异常: ' + (e as Error).message.slice(0, 60) };
     }
   }
 
-  /** 会话控制（goal.pause/resume/complete 或 session.cancel）。内部自动登录取 token。 */
+  /** 会话控制（session/cancel；goal.* 在新协议下需 agent+ref，App 暂不支持）。 */
   static async controlSession(base: string, pin: string, method: string, sessionId: string): Promise<ControlResult> {
     const b = base.replace(/\/+$/, '');
-    let token = '';
-    try {
-      const ck = webview.WebCookieManager.fetchCookieSync(b);
-      const m = ck.match(/dsh_pocket_token=([^;]+)/);
-      if (m !== null && m.length > 1) {
-        token = m[1].trim();
-      }
-    } catch (e) {
-    }
-    if (token.length === 0) {
-      const login = await PocketApi.login(b, pin);
-      if (!login.ok || login.token.length === 0) {
-        return { ok: false, error: '未登录且登录失败: ' + login.detail };
-      }
-      token = login.token;
-    }
-    const request = http.createHttp();
-    const body: ClientRequestMsg = {
-      'type': 'client-request',
-      'rpcId': 'dsh-harmony-ctrl',
-      'method': method,
-      'payload': { 'sessionId': sessionId }
-    };
-    try {
-      const resp = await request.request(b + '/api/' + method + '?token=' + encodeURIComponent(token), {
-        method: http.RequestMethod.POST,
-        header: { 'Content-Type': 'application/json' },
-        extraData: JSON.stringify(body),
-        connectTimeout: 8000,
-        readTimeout: 12000
-      });
-      if (resp.responseCode === 200) {
+    if (method.startsWith('session.')) {
+      const endpoint = method.replace(/\./g, '/');
+      const args: Record<string, Object> = { 'sessionId': sessionId };
+      const r = await PocketApi.rpc(b, pin, endpoint, 'dsh-harmony-ctrl', 'request', args, 12000);
+      if (r.code === 200) {
         return { ok: true, error: '' };
       }
-      if (resp.responseCode === 401 || resp.responseCode === 403) {
-        PocketApi.expectedToken = '';
-      }
-      return { ok: false, error: '服务返回 HTTP ' + String(resp.responseCode ?? 0) };
-    } catch (e) {
-      return { ok: false, error: '请求异常: ' + (e as Error).message.slice(0, 60) };
-    } finally {
-      try {
-        request.destroy();
-      } catch (e) {
-      }
+      return { ok: false, error: '服务返回 HTTP ' + String(r.code) + (r.text.startsWith('请求异常') ? ' ' + r.text : '') };
     }
+    return { ok: false, error: 'goal 控制在新协议下需要 goal id/agent，暂不支持' };
   }
 
-  /** 带令牌查询最新会话（服务卡片等外部场景直接使用已保存令牌） */
-  static async queryWithToken(base: string, token: string): Promise<SessionQueryResult> {
-    return PocketApi.querySession(base.replace(/\/+$/, ''), token);
-  }
-
-  private static async querySession(b: string, token: string): Promise<SessionQueryResult> {
-    const request = http.createHttp();
-    const body: ClientRequestMsg = {
-      'type': 'client-request',
-      'rpcId': 'dsh-harmony-session',
-      'method': 'session.list',
-      'payload': {}
-    };
+  private static async querySession(b: string, pin: string): Promise<SessionQueryResult> {
+    const r = await PocketApi.rpc(b, pin, 'session/list', 'dsh-harmony-session', '_request', {}, 12000);
+    if (r.code !== 200) {
+      hilog.warn(DOMAIN, TAG, 'session/list http %{public}d', r.code);
+      return { info: null, error: '服务返回 HTTP ' + String(r.code) + (r.text.startsWith('请求异常') ? ' ' + r.text : ''), token: pin };
+    }
+    if (r.text.startsWith('请求异常')) {
+      return { info: null, error: r.text, token: pin };
+    }
     try {
-      const resp = await request.request(b + '/api/session.list?token=' + encodeURIComponent(token), {
-        method: http.RequestMethod.POST,
-        header: { 'Content-Type': 'application/json' },
-        extraData: JSON.stringify(body),
-        connectTimeout: 8000,
-        readTimeout: 12000
-      });
-      if (resp.responseCode !== 200) {
-        if (resp.responseCode === 401 || resp.responseCode === 403) {
-          // 令牌失效：下次重登
-          PocketApi.expectedToken = '';
-        }
-        hilog.warn(DOMAIN, TAG, 'session.list http %{public}d', resp.responseCode ?? 0);
-        return { info: null, error: '服务返回 HTTP ' + String(resp.responseCode ?? 0), token: token };
-      }
-      const text = String(resp.result ?? '');
-      const parsed = JSON.parse(text) as SessionListResult;
+      const parsed = JSON.parse(r.text) as SessionListResult;
       const items = parsed.result?.value?.items ?? [];
       if (items.length === 0) {
-        return { info: null, error: '无会话数据', token: token };
+        return { info: null, error: '无会话数据', token: pin };
       }
-      return { info: PocketApi.project(items[0]), error: '', token: token };
+      return { info: PocketApi.project(items[0]), error: '', token: pin };
     } catch (e) {
-      hilog.warn(DOMAIN, TAG, 'session.list failed: %{public}s', (e as Error).message);
-      return { info: null, error: '请求异常: ' + (e as Error).message.slice(0, 60), token: token };
-    } finally {
-      try {
-        request.destroy();
-      } catch (e) {
-      }
+      hilog.warn(DOMAIN, TAG, 'session/list failed: %{public}s', (e as Error).message);
+      return { info: null, error: '请求异常: ' + (e as Error).message.slice(0, 60), token: pin };
     }
   }
 

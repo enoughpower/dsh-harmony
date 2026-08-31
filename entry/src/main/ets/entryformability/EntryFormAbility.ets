@@ -58,9 +58,9 @@ export default class EntryFormAbility extends FormExtensionAbility {
       let session: LatestSessionInfo | null = null;
       if (list.length > 0) {
         try {
-          const token = await AppPrefs.getString(this.context, AppPrefs.KEY_POCKET_TOKEN, '');
-          if (token.length > 0) {
-            const q = await PocketApi.queryWithToken(list[0].url, token);
+          const pin = await AppPrefs.getString(this.context, AppPrefs.KEY_LAN_PIN, AppPrefs.DEFAULT_LAN_PIN);
+          if (pin.length > 0) {
+            const q = await PocketApi.queryWithToken(list[0].url, pin);
             if (q.info !== null) {
               session = q.info;
             }

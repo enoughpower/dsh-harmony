@@ -53,6 +53,9 @@ function saveSettings() { writeFileSync(SETTINGS_FILE, JSON.stringify(pushSettin
 // 端点: POST https://push-api.cloud.huawei.com/v3/<projectId>/messages:send (push-type: 0 = 通知消息)
 let jwtCache = { token: '', expiresAt: 0 };
 const { createSign, constants } = await import('node:crypto');
+// WebSocket 实现：优先 ws（可携带 Cookie 头，过 DSH web issue #77）；无则退回全局 WebSocket
+let WSImpl;
+try { WSImpl = (await import('ws')).default; } catch { WSImpl = globalThis.WebSocket; }
 
 function b64url(s) { return Buffer.from(s).toString('base64url'); }
 
@@ -120,6 +123,7 @@ async function huaweiSend(title, body, sessionId) {
     console.log('[push] cleared invalid tokens, before=' + before);
   }
   console.log('[push] send ->', res.status, JSON.stringify(data).slice(0, 200));
+  console.log('[push] body:', String(title || '').slice(0, 60), '|', String(body || '').slice(0, 120));
 }
 
 /** 发送节流队列：串行且 ≥3.1s 间隔（测试渠道限流 3 秒 1 条）；另加 per-session 冷却避免刷屏 */
@@ -157,6 +161,7 @@ function drainQueue() {
 
 // ---- dsh-pocket 会话轮询（仅三场景） ----
 let dshToken = '';
+let dshAuthCookie = '';
 const runningMap = new Map();   // sessionId -> true（曾运行）
 const sessionMeta = new Map();  // sessionId -> {title, objective}
 let baseline = false;
@@ -165,29 +170,40 @@ const POLL_MS = 5000;
 
 /** token 失效(harness 重启/过期) → 清空,下次 poll 重新登录 */
 function invalidateToken() {
-  if (dshToken !== '') {
+  if (dshToken !== '' || dshAuthCookie !== '') {
     dshToken = '';
+    dshAuthCookie = '';
     console.log('[poll] token invalidated, will re-login');
   }
 }
 
 async function ensureDshToken() {
-  if (dshToken) return dshToken;
-  // 登录表单字段名为 token（PIN 值）；成功后 Set-Cookie: dsh_pocket_token
+  if (dshToken && dshAuthCookie) return dshToken;
+  // 1) 登录校验 PIN
   const res = await fetch(DSH_BASE + '/pocket-login', {
     method: 'POST',
     headers: { 'content-type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({ token: DSH_PIN }),
     redirect: 'manual',
   });
-  const setCookie = res.headers.get('set-cookie') || '';
-  const m = setCookie.match(/dsh_pocket_token=([^;]+)/);
-  if (m) {
-    dshToken = m[1];
-    console.log('[poll] dsh token OK');
+  if (res.status !== 302 && res.status !== 303) {
+    console.log('[poll] pin login status=' + res.status);
+    return '';
+  }
+  // 2) 明文 PIN 过代理层；再 GET / 握手取 dsh-auth-*（DSH web issue #77 会话 cookie）
+  dshToken = DSH_PIN;
+  const hs = await fetch(DSH_BASE + '/?token=' + encodeURIComponent(DSH_PIN), { redirect: 'manual' });
+  const cookies = typeof hs.headers.getSetCookie === 'function' ? hs.headers.getSetCookie() : [hs.headers.get('set-cookie') || ''];
+  dshAuthCookie = '';
+  for (const c of cookies) {
+    const m = c.match(/^dsh-auth-[^=]+=[^;]+/);
+    if (m) { dshAuthCookie = m[0]; break; }
+  }
+  if (dshAuthCookie) {
+    console.log('[poll] dsh token OK (raw PIN + dsh-auth cookie)');
     connectEventsHost();
   } else {
-    console.log('[poll] login status=' + res.status);
+    console.log('[poll] handshake no dsh-auth cookie, status=' + hs.status);
   }
   return dshToken;
 }
@@ -196,10 +212,10 @@ async function poll() {
   try {
     const token = await ensureDshToken();
     if (!token) { console.log('[poll] 无 dsh token'); return; }
-    const res = await fetch(DSH_BASE + '/api/session.list?token=' + encodeURIComponent(token), {
+    const res = await fetch(DSH_BASE + '/api/session/list?token=' + encodeURIComponent(token), {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ type: 'client-request', rpcId: 'push-' + Date.now(), method: 'session.list', payload: {} }),
+      headers: { 'content-type': 'application/json', ...(dshAuthCookie ? { cookie: dshAuthCookie } : {}) },
+      body: JSON.stringify({ type: 'client-request', rpcId: 'push-' + Date.now(), method: 'session/list', payload: { args: { _request: {} } } }),
     });
     // token 失效(harness 重启/过期)：清空重登,避免一直 poll 失败
     if (res.status === 401 || res.status === 403) {
@@ -256,24 +272,30 @@ async function poll() {
 // ---- 会话总结（结束汇报一句话） ----
 async function sessionSummary(sid) {
   try {
-    const res = await fetch(DSH_BASE + '/api/session.history?token=' + encodeURIComponent(dshToken), {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ type: 'client-request', rpcId: 'h-' + Date.now(), method: 'session.history', payload: { sessionId: sid, maxMessages: 20 } }),
-    });
-    const j = await res.json();
-    const events = j?.result?.value?.events || [];
-    for (let i = events.length - 1; i >= 0; i--) {
-      const e = events[i]?.event;
-      if (e && (e.type === 'assistant/message' || e.type === 'message')) {
-        const m = e.data?.message || e.message || {};
-        if (m.role === 'assistant') {
-          const parts = Array.isArray(m.content) ? m.content : [];
-          const text = parts.filter((p) => p && p.type === 'text')
-            .map((p) => String(p.text || '')).join(' ').trim();
-          if (text) return cleanSummary(text);
+    let throughSeq = 9007199254740991;
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const res = await fetch(DSH_BASE + '/api/session/page?token=' + encodeURIComponent(dshToken), {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', ...(dshAuthCookie ? { cookie: dshAuthCookie } : {}) },
+        body: JSON.stringify({ type: 'client-request', rpcId: 'h-' + Date.now(), method: 'session/page', payload: { args: { request: { address: { kind: 'session', sessionId: sid }, throughSeq, maxMessages: 20 } } } }),
+      });
+      const j = await res.json();
+      // throughSeq 过大报 "past cursor N"：N 即该会话当前 seq，用它重试
+      const mm = String(j?.result?.error?.message || '').match(/past cursor (\d+)/);
+      if (mm && attempt === 0) { throughSeq = Number(mm[1]); continue; }
+      const records = j?.result?.value?.records || [];
+      for (let i = records.length - 1; i >= 0; i--) {
+        const ev = records[i]?.event;
+        if (ev && (ev.type === 'assistant/message' || ev.type === 'message')) {
+          const m = ev.data?.message || {};
+          if (m.role === 'assistant' && Array.isArray(m.content)) {
+            const text = m.content.filter((p) => p && p.type === 'text')
+              .map((p) => String(p.text || '')).join(' ').trim();
+            if (text) return cleanSummary(text);
+          }
         }
       }
+      return '';
     }
   } catch (e) { }
   return '';
@@ -341,43 +363,49 @@ let wsRetry = 0;
 const sentQuestions = new Set();   // 已提醒的问题/批准，防重连回放重复推
 const startedAt = Date.now();
 let lastPollAt = 0;
+let evStreamId = '';
+function handleHostEvent(event, args) {
+  const a = Array.isArray(args) ? args : [args];
+  const s = String(event || '');
+  console.log('[evt] event=' + s);
+  // best-effort 识别「需信息/批准」：匹配事件名特征
+  if (/question|approval|need|interact|request/i.test(s)) {
+    const first = (a && a[0]) || {};
+    const sid = String(first && typeof first === 'object' ? (first.sessionId || first.id || '') : '');
+    const text = s + ' ' + JSON.stringify(a).slice(0, 180);
+    console.log('[evt] interact candidate: ' + text);
+    sendCase('DSH 任务', '📩 需要你提供信息或批准：' + text, sid, 'interact');
+  }
+}
 function connectEventsHost() {
   const u = new URL(DSH_BASE);
-  const wsUrl = 'ws://' + u.host + '/api/events.mux?token=' + encodeURIComponent(dshToken);
-  const ws = new WebSocket(wsUrl);
-  ws.onopen = () => { console.log('[evt] events.mux connected'); wsRetry = 0; };
+  const wsProto = u.protocol === 'https:' ? 'wss://' : 'ws://';
+  const wsUrl = wsProto + u.host + '/api/remote.mux?token=' + encodeURIComponent(dshToken);
+  const opts = dshAuthCookie ? { headers: { Cookie: dshAuthCookie } } : {};
+  const ws = new WSImpl(wsUrl, [], opts);
+  ws.onopen = () => {
+    evStreamId = globalThis.crypto.randomUUID();
+    try { ws.send(JSON.stringify({ type: 'open', streamId: evStreamId, endpoint: '$events', payload: { args: {} } })); } catch (e) {}
+    console.log('[evt] remote.mux connected, $events opened');
+    wsRetry = 0;
+  };
   ws.onmessage = (ev) => {
     try {
-      const raw = typeof ev.data === 'string' ? ev.data : String(ev.data);
+      const raw = typeof ev.data === 'string' ? ev.data : Buffer.from(ev.data).toString('utf8');
       const msg = JSON.parse(raw);
-      const frame = msg?.payload && typeof msg.payload === 'object' ? msg.payload : msg;
-      if (!frame || typeof frame !== 'object') return;
-      if (frame.type === 'question/requested') {
-        const meta = sessionMeta.get(frame.sessionId) || {};
-        const q = (frame.questions || [])[0];
-        const qText = q ? (q.question || q.header || '请回复') : '请回复';
-        // 问题去重：同一会话的同一问题(重连回放/replay)不重复推
-        const qKey = String(frame.sessionId || '') + ':' + qText;
-        if (sentQuestions.has(qKey)) return;
-        sentQuestions.add(qKey);
-        sendCase(meta.title || 'DSH 任务', '📩 需要你提供信息：' + String.fromCharCode(10) + qText.slice(0, 200), frame.sessionId, 'interact');
-      } else if (frame.type === 'approval/requested') {
-        const meta = sessionMeta.get(frame.sessionId) || {};
-        const aKey = String(frame.sessionId || '') + ':' + String(frame.approvalId || '');
-        if (sentQuestions.has(aKey)) return;
-        sentQuestions.add(aKey);
-        sendCase(meta.title || 'DSH 任务', '🛂 需要你批准：' + String(frame.toolName || '工具调用') +
-          (frame.reason ? String.fromCharCode(10) + frame.reason : ''), frame.sessionId, 'interact');
+      if (msg && msg.type === 'item' && msg.streamId === evStreamId) {
+        const frame = msg.value;
+        if (frame && typeof frame === 'object' && (frame.type === 'emit' || frame.type === 'waterfall')) {
+          handleHostEvent(frame.event, frame.args);
+        }
       }
-    } catch (e) {
-      console.log('[evt] parse err', e.message);
-    }
+    } catch (e) { console.log('[evt] parse err', e.message); }
   };
   ws.onclose = () => {
     console.log('[evt] closed, retry=' + wsRetry);
     if (wsRetry < 5) { wsRetry++; setTimeout(connectEventsHost, 5000 * wsRetry); }
   };
-  ws.onerror = () => { console.log('[evt] error'); };
+  ws.onerror = (e) => { console.log('[evt] error ' + (e && e.message ? e.message : '')); };
 }
 
 // ---- HTTP: 收手机 token / 状态查询 ----
