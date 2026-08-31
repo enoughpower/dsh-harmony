@@ -1,5 +1,19 @@
 # Changelog
 
+## 2026-08-31
+
+### fix
+- **会话数据取不到（新版 dsh web / dsh-pocket 协议变更）**：适配新版 typert gateway + issue #77 会话 cookie。
+  - `PocketApi` 全面改新版协议：代理层用 `?token=<明文 PIN>`、转发 ArkWeb 的 `dsh-auth-*` 会话 cookie；RPC 端点 `session.*`→`session/*` 斜杠、`payload:{args:{_request|request:...}}`（`list` 用 `_request`，其余用 `request`）。
+  - 首页「最新会话」/「会话列表」恢复显示（真机验证：读取文档 · 进行中 · 8 轮 · 147 步）。
+  - `sessionHistory` 改走 `session/page`，按事件类型折叠出消息（`user/message` 取 `data.content`、`assistant/message` 取 `data.message.content`），详情页「对话」恢复显示（真机验证）。
+  - 服务卡片（`CardSync`/`EntryFormAbility`）改传明文 PIN。
+- **通知不推送**：电脑端 `push-notify` 用旧协议轮询 dsh-pocket（`?token=<哈希>` + `session.list`）导致 401 死循环，改新版协议（明文 PIN + dsh-auth cookie + `session/list`、`session/page`）；实时交互通道 `events.mux`→`/api/remote.mux` + 开 `$events` 流（携带 dsh-auth cookie，需 ws 库）。中招即修复。
+  - `scripts/run-push-notify.sh` 修复路径 bug（`cd ../tools/push-notify` 指向不存在目录 → 服务 `MODULE_NOT_FOUND` 崩溃），改为自定位 + `--env-file=.env`；`deploy-push.sh` 自动安装 `ws`。
+
+### feat
+- **Markdown 表格渲染**：`common/utils/Markdown.ets` 解析器新增表格块（`| 表头 | 表头 |` + 分隔行 + `| 行 |` → `MdBlock.rows`）；`components/MarkdownText.ets` 渲染为网格表格（表头加粗、单元格边框、圆角、行内样式）。真机验证详情页「对话」中表格正确分栏显示（表头/数据两列）。新增 `entry/src/test/test/Markdown.test.ets` 单测并注册。
+
 ## 2026-08-30
 
 ### feat
