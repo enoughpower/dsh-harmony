@@ -84,6 +84,29 @@ export struct MarkdownText {
       }
       .width('100%')
       .alignItems(HorizontalAlign.Start)
+    } else if (b.kind === 'table') {
+      Column({ space: 0 }) {
+        ForEach(b.rows, (row: string[], ri: number) => {
+          Row() {
+            ForEach(row, (cell: string, ci: number) => {
+              Text() { this.Inline(cell) }
+                .layoutWeight(1)
+                .fontSize(12)
+                .fontWeight(ri === 0 ? FontWeight.Bold : FontWeight.Normal)
+                .fontColor($r('app.color.text_primary'))
+                .padding({ left: 6, right: 6, top: 5, bottom: 5 })
+                .borderWidth({ right: ci < row.length - 1 ? 1 : 0, bottom: ri < b.rows.length - 1 ? 1 : 0 })
+                .borderColor(this.osThemeIsDark ? '#3A414C' : '#E2E5EC')
+            }, (cell: string, ci: number) => 'c' + ci)
+          }
+          .width('100%')
+        }, (row: string[], ri: number) => 'r' + ri)
+      }
+      .width('100%')
+      .borderWidth(1)
+      .borderColor(this.osThemeIsDark ? '#3A414C' : '#E2E5EC')
+      .borderRadius(6)
+      .clip(true)
     } else if (b.kind === 'quote') {
       Text() { this.Inline(b.text) }
         .fontColor($r('app.color.text_secondary'))

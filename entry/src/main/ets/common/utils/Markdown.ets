@@ -3,16 +3,18 @@
  * Markdown.ets —— 轻量 Markdown 解析器（ArkTS strict 安全）。
  * 把 md 文本解析为「块」+「行内样式」，供 ArkUI 用 Text/Span 渲染。
  * 支持：标题(#/##/###)、段落、代码块(```)、有序/无序列表、引用(>)、分隔线(---)、
+ * 表格(| 表头 | 表头 |  + 分隔行 + | 行 |)，
  * 行内样式：**加粗** *斜体* `行内代码` [链接](url) 。
  */
 
 export interface MdBlock {
-  kind: string;        // 'heading' | 'para' | 'code' | 'list' | 'quote' | 'hr'
+  kind: string;        // 'heading' | 'para' | 'code' | 'list' | 'quote' | 'hr' | 'table'
   level: number;       // 标题级别 1..3
   ordered: boolean;    // 是否有序列表
   text: string;        // heading/para/quote 的原文
   items: string[];     // list 项
   lang: string;        // 代码块语言
+  rows: string[][];    // 表格行（含表头行）；kind==='table' 时使用
 }
 
 export interface MdInlineNode {
@@ -30,7 +32,7 @@ function makeBlock(kind: string, text: string, level: number, ordered: boolean,
     arr.push(it);
   }
   return {
-    kind: kind, level: level, ordered: ordered, text: text, items: arr, lang: lang
+    kind: kind, level: level, ordered: ordered, text: text, items: arr, lang: lang, rows: []
   };
 }
 
@@ -87,7 +89,57 @@ function isHr(s: string): boolean {
 }
 
 function isBlockStart(s: string): boolean {
-  return headingLevel(s) > 0 || s.startsWith('```') || isListStart(s) || s.startsWith('>') || isHr(s);
+  return headingLevel(s) > 0 || s.startsWith('```') || isListStart(s) || s.startsWith('>') || isHr(s) || isTableRow(s);
+}
+
+/** 拆一行表格为单元格数组（忽略行内代码里的 |）。 */
+function tableCells(s: string): string[] {
+  let t = s.trim();
+  if (t.startsWith('|')) t = t.substring(1);
+  if (t.endsWith('|')) t = t.substring(0, t.length - 1);
+  const cells: string[] = [];
+  let start = 0;
+  let inCode = false;
+  for (let k = 0; k <= t.length; k++) {
+    const ch: string = k < t.length ? t.charAt(k) : '|';
+    if (ch === '`') inCode = !inCode;
+    if (ch === '|' && !inCode) {
+      cells.push(t.substring(start, k).trim());
+      start = k + 1;
+    }
+  }
+  return cells;
+}
+
+/** 是否为表格行：以 | 开头以 | 结尾且含第二个 |。 */
+function isTableRow(s: string): boolean {
+  const t = s.trim();
+  if (t.length < 3 || t.charAt(0) !== '|' || t.charAt(t.length - 1) !== '|') {
+    return false;
+  }
+  return t.indexOf('|', 1) >= 0;
+}
+
+/** 是否为表格分隔行（| --- | --- | 之类）。 */
+function isTableSep(s: string): boolean {
+  const cells = tableCells(s);
+  if (cells.length === 0) return false;
+  for (const c of cells) {
+    if (!/^:?-+:?$/.test(c)) return false;
+  }
+  return true;
+}
+
+function makeTableBlock(rows: string[][]): MdBlock {
+  const out: string[][] = [];
+  for (const r of rows) {
+    const rr: string[] = [];
+    for (const c of r) rr.push(c);
+    out.push(rr);
+  }
+  const b: MdBlock = makeBlock('table', '', 0, false, [], '');
+  b.rows = out;
+  return b;
 }
 
 /** 按行解析为块序列。 */
@@ -151,6 +203,19 @@ export function parseMarkdown(md: string): MdBlock[] {
         i++;
       }
       blocks.push(makeBlock('list', '', 0, ordered, items, ''));
+      continue;
+    }
+    // 表格：表头行 + 分隔行
+    if (isTableRow(t) && i + 1 < n && isTableSep(lines[i + 1])) {
+      const rows: string[][] = [];
+      rows.push(tableCells(raw));
+      i++;
+      i++;
+      while (i < n && isTableRow(lines[i])) {
+        rows.push(tableCells(lines[i]));
+        i++;
+      }
+      blocks.push(makeTableBlock(rows));
       continue;
     }
     // 段落：累积到空行或新的块标记
