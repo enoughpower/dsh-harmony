@@ -63,6 +63,7 @@ struct SessionDetailPage {
   private timer: number = -1;
   private refreshTimer: number = -1;
   private ws: webSocket.WebSocket | null = null;
+  private muxStreamId: string = '';
   private wsRetry: number = 0;
   private token: string = '';
   private detached: boolean = false;
@@ -144,10 +145,24 @@ struct SessionDetailPage {
       return;
     }
     const host = rest.split('/')[0];
-    const wsUrl = proto + host + '/api/events.mux?token=' + encodeURIComponent(token);
+    const wsUrl = proto + host + '/api/remote.mux?token=' + encodeURIComponent(token);
+    const cookie = PocketApi.getDshAuthCookie(this.baseUrl);
     const ws = webSocket.createWebSocket();
     this.ws = ws;
     ws.on('open', (err: BusinessError, value: Object) => {
+      this.muxStreamId = 'dsh-' + util.generateRandomUUID();
+      try {
+        const argsRec: Record<string, Object> = {};
+        const payloadRec: Record<string, Object> = { 'args': argsRec };
+        const openMsg: Record<string, Object> = {
+          'type': 'open',
+          'streamId': this.muxStreamId,
+          'endpoint': '$events',
+          'payload': payloadRec
+        };
+        ws.send(JSON.stringify(openMsg));
+      } catch (e) {
+      }
       this.wsRetry = 0;
     });
     ws.on('message', (err: BusinessError, data: string | ArrayBuffer) => {
@@ -172,7 +187,11 @@ struct SessionDetailPage {
     ws.on('error', (err: BusinessError) => {
       console.log('[detail] ws error: %{public}s', err.message);
     });
-    ws.connect(wsUrl, (err: BusinessError) => {
+    const header: Record<string, string> = {};
+    if (cookie.length > 0) {
+      header['Cookie'] = cookie;
+    }
+    ws.connect(wsUrl, { 'header': header }, (err: BusinessError) => {
       if (err) {
         console.log('[detail] ws connect err: %{public}s', err.message);
       }
@@ -194,15 +213,17 @@ struct SessionDetailPage {
     if (raw.indexOf(this.sessionId) < 0) {
       return false;
     }
-    // 只会引起“消息/状态/轮步”变化的帧：整条消息、投影、轮步、订阅完成；其余(assistant/chunk、tool/*)忽略
-    return raw.indexOf('assistant/message') >= 0
+    // $events 逻辑流（/api/remote.mux）：api-session/* 事件、emit/waterfall 帧 → 刷新界面；
+    // 保留旧标记（assistant/message、user/message、turn/*、step/*）兼容。
+    return raw.indexOf('"emit"') >= 0
+      || raw.indexOf('"waterfall"') >= 0
+      || raw.indexOf('api-session/') >= 0
+      || raw.indexOf('assistant/message') >= 0
       || raw.indexOf('user/message') >= 0
-      || raw.indexOf('session/projection') >= 0
       || raw.indexOf('turn/start') >= 0
       || raw.indexOf('turn/end') >= 0
       || raw.indexOf('step/start') >= 0
-      || raw.indexOf('step/end') >= 0
-      || raw.indexOf('session/subscribed') >= 0;
+      || raw.indexOf('step/end') >= 0;
   }
 
   /** 防抖刷新（400ms，避免高频事件连刷）。 */

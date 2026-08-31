@@ -277,6 +277,11 @@ export class PocketApi {
     return { tokenQuery: encodeURIComponent(pin), cookie };
   }
 
+  /** 供详情页 WS 复用：读取 ArkWeb 里已登录的 dsh-auth-* 会话 cookie（DSH web issue #77）。 */
+  static getDshAuthCookie(base: string): string {
+    return PocketApi.auth(base, '').cookie;
+  }
+
   /** 发起一次新协议 RPC：POST /api/<endpoint>?token=... 携带 dsh-auth cookie。 */
   private static async rpc(
     base: string,
