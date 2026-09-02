@@ -10,6 +10,7 @@
   - 服务卡片（`CardSync`/`EntryFormAbility`）改传明文 PIN。
 - **通知不推送**：电脑端 `push-notify` 用旧协议轮询 dsh-pocket（`?token=<哈希>` + `session.list`）导致 401 死循环，改新版协议（明文 PIN + dsh-auth cookie + `session/list`、`session/page`）；实时交互通道 `events.mux`→`/api/remote.mux` + 开 `$events` 流（携带 dsh-auth cookie，需 ws 库）。中招即修复。
   - `scripts/run-push-notify.sh` 修复路径 bug（`cd ../tools/push-notify` 指向不存在目录 → 服务 `MODULE_NOT_FOUND` 崩溃），改为自定位 + `--env-file=.env`；`deploy-push.sh` 自动安装 `ws`。
+  - **会话结束推送**：默认用对勾（`✅ 会话已结束`/`✅ 任务完成`）；仅当最后 `turn/end` 的 `reason.kind === 'error'`（任务失败）或 `goal.phase === 'blocked'`（受阻/需关注）时才用 `⚠️ 任务失败`（不再默认黄色三角）。
 
 ### feat
 - **Markdown 表格渲染**：`common/utils/Markdown.ets` 解析器新增表格块（`| 表头 | 表头 |` + 分隔行 + `| 行 |` → `MdBlock.rows`）；`components/MarkdownText.ets` 渲染为网格表格（表头加粗、单元格边框、圆角、行内样式）。真机验证详情页「对话」中表格正确分栏显示（表头/数据两列）。新增 `entry/src/test/test/Markdown.test.ets` 单测并注册。

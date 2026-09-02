@@ -246,8 +246,12 @@ async function poll() {
         runningMap.delete(sid);
         const phase = s.goal?.goal?.phase || '';
         const done = (phase === 'complete');
-        const summary = await sessionSummary(sid);
-        const head = done ? '✅ 任务完成' : '⚠️ 会话已结束';
+        const blocked = (phase === 'blocked');
+        const res = await sessionSummary(sid);
+        // 默认对勾；仅任务失败(error)或受阻(blocked/需要注意)才用警告
+        const failed = res.failed || blocked;
+        const summary = res.text;
+        const head = failed ? '⚠️ 任务失败' : (done ? '✅ 任务完成' : '✅ 会话已结束');
         const goal = String(s.goal?.goal?.objective || '').slice(0, 40);
         const meta = goal ? ' · ' + goal : '';
         await sendCase(title + meta, summary ? head + '：' + summary : head, sid, 'end');
@@ -284,21 +288,27 @@ async function sessionSummary(sid) {
       const mm = String(j?.result?.error?.message || '').match(/past cursor (\d+)/);
       if (mm && attempt === 0) { throughSeq = Number(mm[1]); continue; }
       const records = j?.result?.value?.records || [];
+      let summaryText = '';
+      let endReason = null;
       for (let i = records.length - 1; i >= 0; i--) {
         const ev = records[i]?.event;
-        if (ev && (ev.type === 'assistant/message' || ev.type === 'message')) {
+        if (!ev) continue;
+        // 最后一条 turn/end 的原因决定最终状态（ERROR=任务失败）
+        if (endReason === null && ev.type === 'turn/end') endReason = ev.data?.reason || null;
+        if (summaryText === '' && (ev.type === 'assistant/message' || ev.type === 'message')) {
           const m = ev.data?.message || {};
           if (m.role === 'assistant' && Array.isArray(m.content)) {
             const text = m.content.filter((p) => p && p.type === 'text')
               .map((p) => String(p.text || '')).join(' ').trim();
-            if (text) return cleanSummary(text);
+            if (text) summaryText = text;
           }
         }
       }
-      return '';
+      const failed = !!(endReason && endReason.kind === 'error');
+      return { text: summaryText ? cleanSummary(summaryText) : '', failed };
     }
   } catch (e) { }
-  return '';
+  return { text: '', failed: false };
 }
 function cleanSummary(t) {
   // 去代码块/多余空白 → 单行截断 80
