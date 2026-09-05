@@ -36,6 +36,8 @@ export interface LatestSessionInfo {
 /** 任务列表项（session.list 全量投影） */
 export interface TaskInfo {
   sessionId: string;
+  /** 会话运行目录（工作区） */
+  cwd: string;
   title: string;
   updatedAt: number;
   running: boolean;
@@ -165,6 +167,8 @@ interface SessionItem {
   updatedAt?: number;
   running?: boolean;
   blank?: boolean;
+  /** 会话运行目录（工作区） */
+  cwd?: string;
   projections?: Projections;
 }
 
@@ -179,6 +183,19 @@ interface SessionListResultInner {
 
 interface SessionListResult {
   result?: SessionListResultInner;
+}
+
+/** workspace.list 响应（仅声明用到的字段：归档会话 id 集合） */
+interface WorkspaceListValue {
+  archivedSessionIds?: string[];
+}
+
+interface WorkspaceListResultInner {
+  value?: WorkspaceListValue;
+}
+
+interface WorkspaceListResult {
+  result?: WorkspaceListResultInner;
 }
 
 /** session/search 响应 */
@@ -374,12 +391,22 @@ export class PocketApi {
     try {
       const parsed = JSON.parse(r.text) as SessionListResult;
       const items = parsed.result?.value?.items ?? [];
+      const archived = await PocketApi.queryArchivedIds(b, pin);
       const tasks: TaskInfo[] = [];
       for (const it of items) {
         if (it.blank === true) continue;
+        // 隐藏已归档/已删除的会话（workspace.list 的 archivedSessionIds）
+        if (it.sessionId !== undefined && it.sessionId.length > 0 && archived.indexOf(it.sessionId) >= 0) {
+          continue;
+        }
         const stats = it.projections?.values?.sessionStats;
+        // 隐藏空白/未使用会话（0 轮 0 步且未运行，stats 缺失时按 0 处理）
+        if ((stats?.turns ?? 0) === 0 && (stats?.steps ?? 0) === 0 && it.running !== true) {
+          continue;
+        }
         tasks.push({
           sessionId: it.sessionId ?? '',
+          cwd: it.cwd ?? '',
           title: it.projections?.values?.title ?? '',
           updatedAt: it.updatedAt ?? 0,
           running: it.running === true,
@@ -392,6 +419,24 @@ export class PocketApi {
       return { tasks, error: '', token: pin };
     } catch (e) {
       return { tasks: [], error: '解析异常: ' + (e as Error).message.slice(0, 60), token: pin };
+    }
+  }
+
+  /** 查询归档会话 id 集合（workspace.list 的 archivedSessionIds），用于过滤任务列表中已归档/已删除的会话。 */
+  private static async queryArchivedIds(b: string, pin: string): Promise<string[]> {
+    const r = await PocketApi.rpc(b, pin, 'workspace.list', 'dsh-harmony-archived', 'request', {}, 12000);
+    if (r.code !== 200 || r.text.startsWith('请求异常')) {
+      return [];
+    }
+    try {
+      const parsed = JSON.parse(r.text) as WorkspaceListResult;
+      const value = parsed.result?.value;
+      if (value === undefined) {
+        return [];
+      }
+      return value.archivedSessionIds ?? [];
+    } catch (e) {
+      return [];
     }
   }
 

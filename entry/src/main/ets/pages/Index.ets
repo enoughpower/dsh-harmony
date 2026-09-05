@@ -1,5 +1,6 @@
 import { abilityAccessCtrl, common, Permissions } from '@kit.AbilityKit';
 import { router, promptAction } from '@kit.ArkUI';
+import { HdsTabs, HdsTabsController, hdsMaterial } from '@kit.UIDesignKit';
 import { scanBarcode, scanCore } from '@kit.ScanKit';
 import { fileIo } from '@kit.CoreFileKit';
 import { util } from '@kit.ArkTS';
@@ -20,6 +21,7 @@ import { SettingsView } from '../components/SettingsView';
 import { HistoryView } from '../components/HistoryView';
 import { DeviceUtils } from '../common/utils/DeviceUtils';
 import { FeatureFlags } from '../common/config/FeatureFlags';
+import { SessionListTab } from './TasksPage';
 
 const DOMAIN = 0x0000;
 const TAG = 'DSHHarmony';
@@ -45,6 +47,12 @@ struct Index {
   @State balanceCurrency: string = '';
   @State balanceProgress: number = 100;
   @State cardScale: number = 1;
+  /** 余额展示（滚动动画）与阈值告警 */
+  @State balanceStr: string = '0.00';
+  @State balanceBelow: boolean = false;
+  @State balancePulse: number = 1;
+  private balancePrevNum: number = 0;
+  private balanceAnimTimer: number = -1;
   /** 状态栏高度（沉浸式时内容顶部留白），onPageShow 实测校正 */
   @State statusBarH: number = 28;
   /** 底部导航条/手势条高度（避让用） */
@@ -53,6 +61,9 @@ struct Index {
   @State wide: boolean = false;
   /** 左栏是否收起（宽屏） */
   @State collapsed: boolean = false;
+  /** 底部双 Tab 当前索引（0=首页,1=会话列表） */
+  @State curTab: number = 0;
+  private hdsController: HdsTabsController = new HdsTabsController();
   /** 当前 Web 连接地址 */
   @State webUrl: string = '';
   /** 最近一次加载最新会话所用的连接基址（供详情页 API 使用） */
@@ -409,6 +420,18 @@ struct Index {
                 this.prevBalanceTotal = this.balanceTotal;
                 this.balanceProgress = 100;
                 this.pulseBalanceCard();
+                // 阈值告警（低于通知设置的阈值 -> 红色）+ 金额滚动动画
+                const numVal = parseFloat(this.balanceTotal);
+                if (!isNaN(numVal)) {
+                  AppPrefs.getString(ctx, AppPrefs.KEY_PUSH_BALANCE_THRESHOLD, AppPrefs.DEFAULT_PUSH_BALANCE_THRESHOLD).then((th: string) => {
+                    const thNum = parseFloat(th);
+                    this.balanceBelow = !isNaN(thNum) && numVal > 0 && numVal < thNum;
+                  }).catch(() => {
+                  });
+                  this.animateBalance(numVal);
+                } else {
+                  this.balanceStr = this.balanceTotal;
+                }
                 AppPrefs.setString(ctx, AppPrefs.KEY_BALANCE_TOTAL, this.balanceTotal).catch(() => {
                 });
                 AppPrefs.setString(ctx, AppPrefs.KEY_BALANCE_CURRENCY, this.balanceCurrency).catch(() => {
@@ -442,6 +465,40 @@ struct Index {
           this.cardScale = 1;
         });
       }, 240);
+    } catch (e) {
+    }
+  }
+
+  /** 余额数字滚动（ease-out）+ 缩放脉冲，刷新更炫酷。 */
+  private animateBalance(newVal: number): void {
+    const from = this.balancePrevNum;
+    this.balancePrevNum = newVal;
+    if (this.balanceAnimTimer >= 0) {
+      clearInterval(this.balanceAnimTimer);
+      this.balanceAnimTimer = -1;
+    }
+    const steps = 20;
+    let step = 0;
+    this.balanceAnimTimer = setInterval(() => {
+      step++;
+      const ratio = step / steps;
+      const eased = 1 - Math.pow(1 - ratio, 3);
+      this.balanceStr = (from + (newVal - from) * eased).toFixed(2);
+      if (step >= steps) {
+        clearInterval(this.balanceAnimTimer);
+        this.balanceAnimTimer = -1;
+        this.balanceStr = newVal.toFixed(2);
+      }
+    }, 28);
+    try {
+      this.getUIContext().animateTo({ duration: 160, curve: Curve.EaseOut }, () => {
+        this.balancePulse = 1.18;
+      });
+      setTimeout(() => {
+        this.getUIContext().animateTo({ duration: 280, curve: Curve.EaseOut }, () => {
+          this.balancePulse = 1;
+        });
+      }, 180);
     } catch (e) {
     }
   }
@@ -865,15 +922,20 @@ struct Index {
           Text('DeepSeek 余额')
             .fontSize(12)
             .fontColor($r('app.color.text_secondary'))
-          Text(this.balanceTotal)
-            .fontSize(30)
-            .fontWeight(FontWeight.Bold)
-            .fontColor($r('app.color.primary'))
-          if (this.balanceCurrency.length > 0) {
-            Text(this.balanceCurrency)
-              .fontSize(12)
-              .fontColor($r('app.color.text_secondary'))
+          Row({ space: 4 }) {
+            Text('¥' + this.balanceStr)
+              .fontSize(30)
+              .fontWeight(FontWeight.Bold)
+              .fontColor(this.balanceBelow ? '#FF3B30' : $r('app.color.text_primary'))
+              .scale({ x: this.balancePulse, y: this.balancePulse })
+            if (this.balanceCurrency.length > 0) {
+              Text(this.balanceCurrency)
+                .fontSize(12)
+                .fontColor($r('app.color.text_secondary'))
+                .margin({ bottom: 5 })
+            }
           }
+          .alignItems(VerticalAlign.Bottom)
         }
         .alignItems(HorizontalAlign.Start)
         .width('100%')
@@ -886,7 +948,7 @@ struct Index {
           .animation({ duration: 1000, curve: Curve.Linear })
       }
       .width('100%')
-      .padding({ left: 20, right: 20, top: 16, bottom: 16 })
+      .padding(16)
       .backgroundColor($r('app.color.card_background'))
       .borderRadius($r('app.float.card_corner_radius'))
       .scale({ x: this.cardScale, y: this.cardScale })
@@ -955,39 +1017,6 @@ struct Index {
     .borderRadius($r('app.float.card_corner_radius'))
     .onClick(() => {
       this.openLatestSessionDetail();
-    })
-  }
-
-  @Builder
-  SessionListCard() {
-    Row({ space: 12 }) {
-      SymbolGlyph($r('sys.symbol.list_bullet'))
-        .fontSize(24)
-        .fontColor([$r('app.color.primary')])
-      Column({ space: 4 }) {
-        Text('会话列表')
-          .fontSize(16)
-          .fontWeight(FontWeight.Medium)
-          .fontColor($r('app.color.text_primary'))
-          .alignSelf(ItemAlign.Start)
-        Text('查看全部会话与进度')
-          .fontSize(12)
-          .fontColor($r('app.color.text_secondary'))
-          .alignSelf(ItemAlign.Start)
-      }
-      .layoutWeight(1)
-      .alignItems(HorizontalAlign.Start)
-      Text('›')
-        .fontSize(20)
-        .fontWeight(FontWeight.Medium)
-        .fontColor($r('app.color.text_secondary'))
-    }
-    .width('100%')
-    .padding(16)
-    .backgroundColor($r('app.color.card_background'))
-    .borderRadius($r('app.float.card_corner_radius'))
-    .onClick(() => {
-      router.pushUrl({ url: 'pages/TasksPage' });
     })
   }
 
@@ -1154,31 +1183,71 @@ struct Index {
     }
   }
 
+  /** 内容层：官方 UI Design Kit 底部页签（HdsTabs：悬浮胶囊 + 模糊光感） */
   @Builder
   MainContent() {
-    Column({ space: 16 }) {
-      this.Header()
+    HdsTabs({ controller: this.hdsController }) {
+      TabContent() {
+        Column({ space: 16 }) {
+          this.Header()
 
-      if (this.connFailed) {
-        this.ConnFailBanner()
+          if (this.connFailed) {
+            this.ConnFailBanner()
+          }
+
+          if (FeatureFlags.PUSH_ENABLED) {
+            this.PushStatusRow()
+          }
+
+          this.BalanceCard()
+
+          this.LatestSessionCard()
+
+          Blank()
+        }
+        .width('100%')
+        .height('100%')
+        .padding({ left: 20, right: 20, top: this.statusBarH + 16, bottom: 0 })
+        .alignItems(HorizontalAlign.Center)
       }
+      .tabBar(new BottomTabBarStyle($r('app.media.tab_home'), '首页')
+        .labelStyle({
+          selectedColor: $r('app.color.primary'),
+          unselectedColor: $r('app.color.text_primary')
+        })
+        .iconStyle({
+          selectedColor: $r('app.color.primary'),
+          unselectedColor: $r('app.color.text_primary')
+        }))
 
-      if (FeatureFlags.PUSH_ENABLED) {
-        this.PushStatusRow()
+      TabContent() {
+        SessionListTab()
       }
-
-      this.BalanceCard()
-
-      this.LatestSessionCard()
-
-      this.SessionListCard()
-
-      Blank()
+      .tabBar(new BottomTabBarStyle($r('app.media.tab_list'), '会话列表')
+        .labelStyle({
+          selectedColor: $r('app.color.primary'),
+          unselectedColor: $r('app.color.text_primary')
+        })
+        .iconStyle({
+          selectedColor: $r('app.color.primary'),
+          unselectedColor: $r('app.color.text_primary')
+        }))
     }
+    .barOverlap(true)
+    .barPosition(BarPosition.End)
+    .vertical(false)
+    .barFloatingStyle({
+      barBottomMargin: 28,
+      gradientMask: { maskColor: '#66F1F3F5', maskHeight: 92 },
+      systemMaterialEffect: {
+        materialType: hdsMaterial.MaterialType.IMMERSIVE,
+        materialLevel: hdsMaterial.MaterialLevel.ADAPTIVE
+      }
+    })
+    .onChange((idx: number) => {
+      this.curTab = idx
+    })
     .width('100%')
     .height('100%')
-    .padding({ left: 20, right: 20, top: this.statusBarH + 16, bottom: this.bottomBarH + 28 })
-    .backgroundColor($r('app.color.page_background'))
-    .alignItems(HorizontalAlign.Center)
   }
 }

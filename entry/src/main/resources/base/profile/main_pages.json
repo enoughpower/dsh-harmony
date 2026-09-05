@@ -1,7 +1,6 @@
 {
   "src": [
     "pages/Index",
-    "pages/TasksPage",
     "pages/SessionDetailPage",
     "pages/WebShell",
     "pages/SettingsPage",

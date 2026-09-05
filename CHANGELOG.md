@@ -6,6 +6,20 @@
 - 自 v2.0.0 以来的主要变更：原生会话详情页（Markdown 渲染/表格/带图发送/实时刷新）、任务与会话管理面板、连接自动切换、DeepSeek 余额显示与余额推送、通知增强（点击直达详情页/去重/推送开关）、平板横屏双栏、适配新版 dsh web/pocket 协议（会话数据/详情页/推送/实时通道 `/api/remote.mux`）。
 - 各功能按日明细见下方日期段。
 
+## 2026-09-05（首页/会话列表 UI 大改 + 官方组件）
+
+### feat
+- **底部双 Tab（首页 + 会话列表）**：改用官方 UI Design Kit HdsTabs 悬浮胶囊 TabBar（BottomTabBarStyle + barFloatingStyle + hdsMaterial IMMERSIVE 光感材质 + barOverlap 模糊叠加）；内容延伸到底部、仅避让手势条；未选中图标/文字浅色黑/深色白、选中主题蓝（labelStyle/iconStyle）。
+- **会话列表按工作区（cwd）分组展示**：组头 = 目录名 + 会话数，组序按最新会话；TaskInfo/SessionItem 补 cwd。
+- **DeepSeek 余额卡**：改为 ¥金额 CNY 排版（默认 text_primary 浅黑/深白）；**低于推送提醒阈值变红**（读 KEY_PUSH_BALANCE_THRESHOLD）；刷新动画升级：金额数字滚动（ease-out）+ 缩放脉冲。
+- 首页删除「会话列表」入口卡（列表已在底部 Tab）；余额/最新会话两卡内边距统一为 16。
+- 新增 Tab 图标 tab_home.svg / tab_list.svg。
+
+### fix
+- **会话列表下拉刷新状态不更新**：ArkUI ForEach 按 sessionId 同 key 复用不重建 → 加 refreshSeq 刷新序号并入 ForEach key，每次取数后强制重建（真机验证状态/轮步实时刷新）。
+- **归档/空白会话过滤回归**（08-31 协议重写时丢失）：恢复 workspace.list archivedSessionIds 过滤 + 0轮0步未运行空白会话过滤。
+- pages/TasksPage 由独立页改为可嵌入 SessionListTab 组件（从 main_pages 移除）。
+
 ## 2026-08-31
 
 ### fix

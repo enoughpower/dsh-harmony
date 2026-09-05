@@ -7,24 +7,30 @@ import { AppPrefs } from '../common/store/AppPrefs';
 import { PocketApi, TaskInfo, SearchResult } from '../common/utils/PocketApi';
 import { CardSync } from '../common/store/CardSync';
 import { WindowBar } from '../common/utils/WindowBar';
-import { BackButton } from '../components/BackButton';
 import { UrlUtils } from '../common/utils/UrlUtils';
 
 const DOMAIN = 0x0000;
 const TAG = 'DSHHarmony';
+
+/** 按工作区（cwd）分组的会话组 */
+interface WorkspaceGroup {
+  name: string;
+  cwd: string;
+  tasks: TaskInfo[];
+}
 
 /**
  * 任务/会话管理面板（P1）：
  * 列出电脑端 dsh-pocket 的所有会话（状态/阶段/轮步/时间），自动刷新；
  * 点某项打开对应工作台。
  */
-@Entry
 @Component
-struct TasksPage {
+export struct SessionListTab {
   @State tasks: TaskInfo[] = [];
   @State loading: boolean = true;
   @State error: string = '';
   @State statusBarH: number = 28;
+  @State bottomBarH: number = 0;
   private timer: number = -1;
   private baseUrl: string = '';
   private token: string = '';
@@ -39,12 +45,18 @@ struct TasksPage {
   @State refreshing: boolean = false;
   @State filter: string = 'all';
   @State filteredTasks: TaskInfo[] = [];
+  @State workspaceGroups: WorkspaceGroup[] = [];
+  /** 刷新序号：每次取数后自增，用于强制 ForEach 重建（ArkUI ForEach 同 key 不更新） */
+  @State refreshSeq: number = 0;
   private store: ConnectionStore = new ConnectionStore();
 
   aboutToAppear(): void {
     const ctx = this.getUIContext().getHostContext() as common.UIAbilityContext;
     WindowBar.statusBarHeight(ctx, (px: number) => this.getUIContext().px2vp(px)).then((h: number) => {
       this.statusBarH = h > 0 ? h : this.statusBarH;
+    });
+    WindowBar.bottomBarHeight(ctx, (px: number) => this.getUIContext().px2vp(px)).then((h: number) => {
+      this.bottomBarH = h > 0 ? h : this.bottomBarH;
     });
     this.reload();
     if (this.timer < 0) {
@@ -95,6 +107,7 @@ struct TasksPage {
     }
     this.tasks = r.tasks;
     this.applyFilter();
+    this.refreshSeq++;
     this.token = r.token;
     this.loading = false;
     if (this.token.length > 0) {
@@ -204,10 +217,9 @@ struct TasksPage {
 
   @Builder
   Header() {
-    Row({ space: 12 }) {
-      BackButton()
+    Row() {
       Column({ space: 2 }) {
-        Text('任务')
+        Text('会话列表')
           .fontSize(22)
           .fontWeight(FontWeight.Bold)
           .fontColor($r('app.color.text_primary'))
@@ -219,6 +231,30 @@ struct TasksPage {
       .layoutWeight(1)
     }
     .width('100%')
+  }
+
+  /** 工作区分组标题 */
+  @Builder
+  WorkspaceHeader(g: WorkspaceGroup) {
+    Row({ space: 8 }) {
+      Circle()
+        .width(6)
+        .height(6)
+        .fill($r('app.color.primary'))
+      Text(g.name)
+        .fontSize(14)
+        .fontWeight(FontWeight.Medium)
+        .fontColor($r('app.color.text_primary'))
+      Text(String(g.tasks.length))
+        .fontSize(11)
+        .fontColor($r('app.color.text_secondary'))
+        .backgroundColor($r('app.color.card_background'))
+        .padding({ left: 8, right: 8, top: 2, bottom: 2 })
+        .borderRadius(10)
+      Blank()
+    }
+    .width('100%')
+    .padding({ left: 4, right: 4, top: 8 })
   }
 
   @Builder
@@ -305,6 +341,36 @@ struct TasksPage {
 
   private applyFilter(): void {
     this.filteredTasks = this.filterTasks(this.tasks);
+    this.computeGroups();
+  }
+
+  /** 按工作区（cwd）分组：组序按最新会话时间，组内会话时间倒序。 */
+  private computeGroups(): void {
+    const groups: WorkspaceGroup[] = [];
+    for (const t of this.filteredTasks) {
+      let g: WorkspaceGroup | null = null;
+      for (const gg of groups) {
+        if (gg.cwd === t.cwd) {
+          g = gg;
+          break;
+        }
+      }
+      if (g === null) {
+        g = { name: this.workspaceLabel(t.cwd), cwd: t.cwd, tasks: [] };
+        groups.push(g);
+      }
+      g.tasks.push(t);
+    }
+    this.workspaceGroups = groups;
+  }
+
+  /** 工作区显示名：取目录最后一段。 */
+  private workspaceLabel(cwd: string): string {
+    if (cwd.length === 0) {
+      return '未命名工作区';
+    }
+    const parts = cwd.split('/').filter((s: string) => s.length > 0);
+    return parts.length > 0 ? parts[parts.length - 1] : cwd;
   }
 
   @Builder
@@ -456,11 +522,17 @@ struct TasksPage {
         } else {
           Refresh({ refreshing: this.refreshing, offset: 40 }) {
             List({ space: 12 }) {
-              ForEach(this.filteredTasks, (t: TaskInfo) => {
+              ForEach(this.workspaceGroups, (g: WorkspaceGroup) => {
                 ListItem() {
-                  this.TaskCard(t)
+                  Column({ space: 12 }) {
+                    this.WorkspaceHeader(g)
+                    ForEach(g.tasks, (t: TaskInfo) => {
+                      this.TaskCard(t)
+                    }, (t: TaskInfo) => this.refreshSeq + '|' + t.sessionId)
+                  }
+                  .width('100%')
                 }
-              }, (t: TaskInfo) => t.sessionId)
+              }, (g: WorkspaceGroup) => this.refreshSeq + '|' + g.cwd)
             }
             .width('100%')
             .layoutWeight(1)
@@ -475,13 +547,12 @@ struct TasksPage {
       }
       .width('100%')
       .height('100%')
-      .padding({ left: 20, right: 20, top: this.statusBarH + 16, bottom: 20 })
+      .padding({ left: 20, right: 20, top: this.statusBarH + 16, bottom: this.bottomBarH })
       .backgroundColor($r('app.color.page_background'))
       .alignItems(HorizontalAlign.Center)
     }
     .width('100%')
     .height('100%')
     .backgroundColor($r('app.color.page_background'))
-    .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.TOP, SafeAreaEdge.BOTTOM])
   }
 }
