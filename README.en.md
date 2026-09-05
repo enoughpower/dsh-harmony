@@ -67,10 +67,21 @@ See the [dsh-pocket README](https://github.com/shaobeichen/dsh-pocket) for plugi
 ./scripts/build.sh --install    # Build and install to the connected device
 ./scripts/smoke.sh              # On-device smoke: install→launch→UI check→log check→uninstall
 ./scripts/unit-test.sh          # Unit tests (device required; or run the Test config in DevEco)
+./scripts/devecocli.sh          # DevEco CLI unified entry (toolchain/device/ui/docs/lint/mcp)
 ./scripts/gen-changelog.sh      # Generate a per-day CHANGELOG section
 ```
 
 Toolchain paths can be overridden via environment variables (`DEVECO_HOME` / `DEVECO_SDK_HOME` / `HVIGORW` / `OHPM` / `HDC`); CI must provide them explicitly.
+
+### DevEco CLI / Code tooling (optional)
+
+The project is wired to Huawei's official **DevEco CLI** (`devecocli`, `@deveco/deveco-cli@stable`) as a unified entry:
+
+- `./scripts/devecocli.sh` auto-points the toolchain to the local **Command Line Tools 26.0.0.821** (Release) and DevEco Studio, then passes through `devecocli` subcommands.
+- Useful: `--check-env`, `device list`, `ui screenshot|layout|click|swipe|text`, `log --level E`, `docs search|read` (offline docs), `check lint`, `check compat`, `signature generate`, `build/run`.
+- `devecocli check lint` needs `code-linter.json5` (committed); `check compat` needs DevEco Studio.
+- **Agent integration**: `./scripts/devecocli.sh --mcp` configures the `deveco-mcp` (`.ets`/C/C++ syntax check) into the project (writes `.mcp.json` / `.cursor/` / `.codex/`, all gitignored, regenerable); `./scripts/devecocli.sh --skill` installs the `deveco-cli` skill into supported agents.
+- **DevEco Code** (`@deveco/deveco-code`, AI-agent tool `deveco`): if the local `~/.local` is root-owned and blocks its data dir, run `sudo chown -R $(whoami) ~/.local` or set `XDG_DATA_HOME/STATE_HOME/CACHE_HOME` to writable paths.
 
 ### Testing
 

@@ -71,10 +71,21 @@ dsh-pocket 安装与使用见其 [README](https://github.com/shaobeichen/dsh-poc
 ./scripts/build.sh --install    # 构建并安装到已连接设备
 ./scripts/smoke.sh              # 真机冒烟：安装→启动→UI 校验→日志检查→卸载
 ./scripts/unit-test.sh          # 单测（需设备；或在 DevEco 内 Run Test 配置）
+./scripts/devecocli.sh          # DevEco CLI 统一入口（toolchain/device/ui/docs/lint/mcp）
 ./scripts/gen-changelog.sh      # 按天生成 CHANGELOG 片段
 ```
 
 工具链路径可用环境变量覆盖（`DEVECO_HOME` / `DEVECO_SDK_HOME` / `HVIGORW` / `OHPM` / `HDC`），CI 场景必须显式提供。
+
+### DevEco CLI / Code 工具链（可选）
+
+本工程已接入华为官方 **DevEco CLI**（`devecocli`，`@deveco/deveco-cli@stable`）作为统一入口：
+
+- `./scripts/devecocli.sh` 会自动把工具链定向到本机 **Command Line Tools 26.0.0.821**（Release）与 DevEco Studio，并透传 `devecocli` 子命令。
+- 常用：`--check-env`（看探测到的路径）、`device list`、`ui screenshot|layout|click|swipe|text`、`log --level E`、`docs search|read`（本地离线文档）、`check lint`、`check compat`、`signature generate`、`build/run`。
+- `devecocli check lint` 依赖 `code-linter.json5`（已随仓库提交）；`check compat` 需 DevEco Studio。
+- **Agent 集成**：`./scripts/devecocli.sh --mcp` 会把 `deveco-mcp`（`.ets`/C/C++ 语法检查）配置到项目（生成 `.mcp.json` / `.cursor/` / `.codex/`，三者已被 gitignore，可随时重新生成）；`./scripts/devecocli.sh --skill` 安装 `deveco-cli` 技能到支持列表中提到的 Agent。
+- **DevEco Code**（`@deveco/deveco-code`，AI Agent 工具 `deveco`）：安装后如遇本机 `~/.local` 属主为 root 导致无法建数据目录，请先 `sudo chown -R $(whoami) ~/.local`，或调用时设置 `XDG_DATA_HOME/STATE_HOME/CACHE_HOME` 指向可写目录。
 
 ### 测试
 

@@ -55,3 +55,8 @@ tools/push-notify/service-account.json
 # ---- 发布产物(默认忽略,仅保留 RELEASE_NOTES) ----
 /release/*
 !/release/RELEASE_NOTES*.md
+
+# ---- DevEco CLI / Agent 生成的本地 MCP 配置(不入库,用 ./scripts/devecocli.sh --mcp 重新生成) ----
+.mcp.json
+.cursor/
+.codex/
