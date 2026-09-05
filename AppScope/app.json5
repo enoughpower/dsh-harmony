@@ -2,8 +2,8 @@
   "app": {
     "bundleName": "com.dsh.lite",
     "vendor": "dsh",
-    "versionCode": 1000005,
-    "versionName": "2.0.0",
+    "versionCode": 1000006,
+    "versionName": "2.0.1",
     "icon": "$media:app_icon",
     "label": "$string:app_name"
   }

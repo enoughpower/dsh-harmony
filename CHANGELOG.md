@@ -1,5 +1,11 @@
 # Changelog
 
+## v2.0.1（2026-09-05）
+
+- 发布说明见 [release/RELEASE_NOTES.v2.0.1.md](release/RELEASE_NOTES.v2.0.1.md)。
+- 自 v2.0.0 以来的主要变更：原生会话详情页（Markdown 渲染/表格/带图发送/实时刷新）、任务与会话管理面板、连接自动切换、DeepSeek 余额显示与余额推送、通知增强（点击直达详情页/去重/推送开关）、平板横屏双栏、适配新版 dsh web/pocket 协议（会话数据/详情页/推送/实时通道 `/api/remote.mux`）。
+- 各功能按日明细见下方日期段。
+
 ## 2026-08-31
 
 ### fix
