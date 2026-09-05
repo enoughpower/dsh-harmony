@@ -72,6 +72,7 @@ dsh-pocket 安装与使用见其 [README](https://github.com/shaobeichen/dsh-poc
 ./scripts/smoke.sh              # 真机冒烟：安装→启动→UI 校验→日志检查→卸载
 ./scripts/unit-test.sh          # 单测（需设备；或在 DevEco 内 Run Test 配置）
 ./scripts/devecocli.sh          # DevEco CLI 统一入口（toolchain/device/ui/docs/lint/mcp）
+./scripts/ui-smoke.sh           # 真机 UI 冒烟（devecocli ui layout 断言 + 截图 + 日志）
 ./scripts/gen-changelog.sh      # 按天生成 CHANGELOG 片段
 ```
 

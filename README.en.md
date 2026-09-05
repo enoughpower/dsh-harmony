@@ -68,6 +68,7 @@ See the [dsh-pocket README](https://github.com/shaobeichen/dsh-pocket) for plugi
 ./scripts/smoke.sh              # On-device smoke: install→launch→UI check→log check→uninstall
 ./scripts/unit-test.sh          # Unit tests (device required; or run the Test config in DevEco)
 ./scripts/devecocli.sh          # DevEco CLI unified entry (toolchain/device/ui/docs/lint/mcp)
+./scripts/ui-smoke.sh           # On-device UI smoke (devecocli ui layout assert + screenshot + logs)
 ./scripts/gen-changelog.sh      # Generate a per-day CHANGELOG section
 ```
 
