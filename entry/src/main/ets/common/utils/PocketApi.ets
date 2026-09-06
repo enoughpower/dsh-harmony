@@ -266,6 +266,10 @@ export class PocketApi {
   private static archivedIdsCache: string[] = [];
   private static archivedAt: number = 0;
   private static readonly ARCHIVED_TTL: number = 30000;
+  /** 短窗去重：同 method 的 RPC 在途/刚完成(≤800ms)时合并，避免首页/列表/小组件并发刷 session.list 触发 dsh-pocket 限流(HTTP 530)。 */
+  private static rpcInflight: Map<string, Promise<RpcResult>> = new Map<string, Promise<RpcResult>>();
+  private static rpcRecentAt: Map<string, number> = new Map<string, number>();
+  private static readonly RPC_DEDUP_MS: number = 800;
 
   /** 组装请求鉴权：tokenQuery=明文 PIN（过代理层）；cookie=dsh-auth-*（过 DSH web 层） */
   private static auth(base: string, pin: string): AuthParam {
@@ -301,6 +305,49 @@ export class PocketApi {
     args: Record<string, Object>,
     readTimeout: number = 12000,
   ): Promise<RpcResult> {
+    const key = endpoint;
+    const now = Date.now();
+    const recent = PocketApi.rpcRecentAt.get(key) ?? 0;
+    if (now - recent < PocketApi.RPC_DEDUP_MS) {
+      const inflight = PocketApi.rpcInflight.get(key);
+      if (inflight !== undefined) {
+        return inflight;
+      }
+    }
+    // 唯一 rpcId：避免网关对同 rpcId 并发的重复判定
+    const uid = String(Date.now()) + '-' + Math.floor(Math.random() * 1000000);
+    const p = PocketApi.rpcOnce(base, pin, endpoint, rpcId + '-' + uid, field, args, readTimeout)
+      .then((r: RpcResult) => {
+        // 瞬时 5xx/530：短延迟自动重试一次（dsh-pocket 限流窗口通常 <1s）
+        if (r.code >= 500) {
+          return new Promise<RpcResult>((resolve) => {
+            setTimeout(() => {
+              resolve(PocketApi.rpcOnce(base, pin, endpoint, rpcId + '-r-' + uid, field, args, readTimeout));
+            }, 450);
+          });
+        }
+        return r;
+      });
+    PocketApi.rpcInflight.set(key, p);
+    PocketApi.rpcRecentAt.set(key, now);
+    try {
+      const result = await p;
+      return result;
+    } finally {
+      PocketApi.rpcInflight.delete(key);
+    }
+  }
+
+  /** 发起一次新协议 RPC：POST /api/<endpoint>?token=... 携带 dsh-auth cookie。 */
+  private static async rpcOnce(
+    base: string,
+    pin: string,
+    endpoint: string,
+    rpcId: string,
+    field: string,
+    args: Record<string, Object>,
+    readTimeout: number = 12000,
+  ): Promise<RpcResult> {
     const b = base.replace(/\/+$/, '');
     const auth = PocketApi.auth(b, pin);
     const request = http.createHttp();
@@ -324,6 +371,9 @@ export class PocketApi {
         connectTimeout: 8000,
         readTimeout: readTimeout
       });
+      if (resp.responseCode !== undefined && resp.responseCode >= 500) {
+        hilog.warn(DOMAIN, TAG, 'rpc ' + endpoint + ' -> HTTP ' + String(resp.responseCode) + ' body=' + String(resp.result ?? '').slice(0, 200));
+      }
       try {
         request.destroy();
       } catch (e) {
