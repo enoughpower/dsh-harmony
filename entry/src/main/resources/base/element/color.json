@@ -51,6 +51,10 @@
     {
       "name": "floating_surface",
       "value": "#B3F0F1F5"
+    },
+    {
+      "name": "tabbar_gradient_mask",
+      "value": "#66F1F3F5"
     }
   ]
 }

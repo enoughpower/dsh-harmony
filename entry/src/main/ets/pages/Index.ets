@@ -1370,7 +1370,7 @@ struct Index {
     .vertical(false)
     .barFloatingStyle({
       barBottomMargin: 28,
-      gradientMask: { maskColor: '#66F1F3F5', maskHeight: 92 },
+      gradientMask: { maskColor: $r('app.color.tabbar_gradient_mask'), maskHeight: 92 },
       systemMaterialEffect: {
         materialType: hdsMaterial.MaterialType.IMMERSIVE,
         materialLevel: hdsMaterial.MaterialLevel.ADAPTIVE
