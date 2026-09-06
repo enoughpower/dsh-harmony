@@ -29,6 +29,9 @@ export class AppPrefs {
   /** DeepSeek 余额缓存（同步给服务卡片） */
   static readonly KEY_BALANCE_TOTAL: string = 'balance_total';
   static readonly KEY_BALANCE_CURRENCY: string = 'balance_currency';
+  /** Kimi 余额缓存（同步给服务卡片） */
+  static readonly KEY_KIMI_BALANCE_TOTAL: string = 'kimi_balance_total';
+  static readonly KEY_KIMI_BALANCE_CURRENCY: string = 'kimi_balance_currency';
 
   static async getBool(context: common.Context, key: string, def: boolean): Promise<boolean> {
     try {

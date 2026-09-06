@@ -53,6 +53,16 @@ struct Index {
   @State balancePulse: number = 1;
   private balancePrevNum: number = 0;
   private balanceAnimTimer: number = -1;
+  /** Kimi 余额展示（滚动动画）与阈值告警 */
+  @State kimiBalanceTotal: string = '';
+  @State kimiBalanceCurrency: string = '';
+  @State kimiBalanceStr: string = '0.00';
+  @State kimiBalanceBelow: boolean = false;
+  @State kimiBalancePulse: number = 1;
+  @State kimiCardScale: number = 1;
+  private kimiBalancePrevNum: number = 0;
+  private kimiBalanceAnimTimer: number = -1;
+  private prevKimiBalanceTotal: string = '';
   /** 状态栏高度（沉浸式时内容顶部留白），onPageShow 实测校正 */
   @State statusBarH: number = 28;
   /** 底部导航条/手势条高度（避让用） */
@@ -437,7 +447,36 @@ struct Index {
                 AppPrefs.setString(ctx, AppPrefs.KEY_BALANCE_CURRENCY, this.balanceCurrency).catch(() => {
                 });
                 // 直接传内存余额刷新小组件（避免读取缓存竞态）
-                CardSync.syncAll(ctx, this.balanceTotal, this.balanceCurrency).catch(() => {
+                CardSync.syncAll(ctx, this.balanceTotal, this.balanceCurrency, this.kimiBalanceTotal, this.kimiBalanceCurrency).catch(() => {
+                });
+              }
+            }
+            // Kimi 余额
+            const kimiBal = j['kimi'] as Record<string, Object> | undefined;
+            const kt = kimiBal?.['total'];
+            const kc = kimiBal?.['currency'];
+            if (kimiBal !== undefined) {
+              this.kimiBalanceTotal = typeof kt === 'string' ? kt : '';
+              this.kimiBalanceCurrency = typeof kc === 'string' ? kc : '';
+              if (this.kimiBalanceTotal.length > 0 && this.kimiBalanceTotal !== this.prevKimiBalanceTotal) {
+                this.prevKimiBalanceTotal = this.kimiBalanceTotal;
+                this.pulseKimiBalanceCard();
+                const kNumVal = parseFloat(this.kimiBalanceTotal);
+                if (!isNaN(kNumVal)) {
+                  AppPrefs.getString(ctx, AppPrefs.KEY_PUSH_BALANCE_THRESHOLD, AppPrefs.DEFAULT_PUSH_BALANCE_THRESHOLD).then((th: string) => {
+                    const thNum = parseFloat(th);
+                    this.kimiBalanceBelow = !isNaN(thNum) && kNumVal > 0 && kNumVal < thNum;
+                  }).catch(() => {
+                  });
+                  this.animateKimiBalance(kNumVal);
+                } else {
+                  this.kimiBalanceStr = this.kimiBalanceTotal;
+                }
+                AppPrefs.setString(ctx, AppPrefs.KEY_KIMI_BALANCE_TOTAL, this.kimiBalanceTotal).catch(() => {
+                });
+                AppPrefs.setString(ctx, AppPrefs.KEY_KIMI_BALANCE_CURRENCY, this.kimiBalanceCurrency).catch(() => {
+                });
+                CardSync.syncAll(ctx, this.balanceTotal, this.balanceCurrency, this.kimiBalanceTotal, this.kimiBalanceCurrency).catch(() => {
                 });
               }
             }
@@ -497,6 +536,55 @@ struct Index {
       setTimeout(() => {
         this.getUIContext().animateTo({ duration: 280, curve: Curve.EaseOut }, () => {
           this.balancePulse = 1;
+        });
+      }, 180);
+    } catch (e) {
+    }
+  }
+
+  /** Kimi 余额卡片轻缩动画。 */
+  private pulseKimiBalanceCard(): void {
+    try {
+      this.getUIContext().animateTo({ duration: 220, curve: Curve.EaseOut }, () => {
+        this.kimiCardScale = 1.05;
+      });
+      setTimeout(() => {
+        this.getUIContext().animateTo({ duration: 320, curve: Curve.EaseOut }, () => {
+          this.kimiCardScale = 1;
+        });
+      }, 240);
+    } catch (e) {
+    }
+  }
+
+  /** Kimi 余额数字滚动（ease-out）+ 缩放脉冲。 */
+  private animateKimiBalance(newVal: number): void {
+    const from = this.kimiBalancePrevNum;
+    this.kimiBalancePrevNum = newVal;
+    if (this.kimiBalanceAnimTimer >= 0) {
+      clearInterval(this.kimiBalanceAnimTimer);
+      this.kimiBalanceAnimTimer = -1;
+    }
+    const steps = 20;
+    let step = 0;
+    this.kimiBalanceAnimTimer = setInterval(() => {
+      step++;
+      const ratio = step / steps;
+      const eased = 1 - Math.pow(1 - ratio, 3);
+      this.kimiBalanceStr = (from + (newVal - from) * eased).toFixed(2);
+      if (step >= steps) {
+        clearInterval(this.kimiBalanceAnimTimer);
+        this.kimiBalanceAnimTimer = -1;
+        this.kimiBalanceStr = newVal.toFixed(2);
+      }
+    }, 28);
+    try {
+      this.getUIContext().animateTo({ duration: 160, curve: Curve.EaseOut }, () => {
+        this.kimiBalancePulse = 1.18;
+      });
+      setTimeout(() => {
+        this.getUIContext().animateTo({ duration: 280, curve: Curve.EaseOut }, () => {
+          this.kimiBalancePulse = 1;
         });
       }, 180);
     } catch (e) {
@@ -955,6 +1043,48 @@ struct Index {
     }
   }
 
+  /** Kimi 余额卡片（样式同 DeepSeek；共享 5 分钟倒计时环形进度） */
+  @Builder
+  KimiBalanceCard() {
+    if (this.kimiBalanceTotal.length > 0) {
+      Stack({ alignContent: Alignment.TopEnd }) {
+        Column({ space: 6 }) {
+          Text('Kimi 余额')
+            .fontSize(12)
+            .fontColor($r('app.color.text_secondary'))
+          Row({ space: 4 }) {
+            Text('¥' + this.kimiBalanceStr)
+              .fontSize(30)
+              .fontWeight(FontWeight.Bold)
+              .fontColor(this.kimiBalanceBelow ? '#FF3B30' : $r('app.color.text_primary'))
+              .scale({ x: this.kimiBalancePulse, y: this.kimiBalancePulse })
+            if (this.kimiBalanceCurrency.length > 0) {
+              Text(this.kimiBalanceCurrency)
+                .fontSize(12)
+                .fontColor($r('app.color.text_secondary'))
+                .margin({ bottom: 5 })
+            }
+          }
+          .alignItems(VerticalAlign.Bottom)
+        }
+        .alignItems(HorizontalAlign.Start)
+        .width('100%')
+        Progress({ value: this.balanceProgress, total: 100, type: ProgressType.Ring })
+          .width(15)
+          .height(15)
+          .color($r('app.color.primary'))
+          .style({ strokeWidth: 2 })
+          .margin({ right: 0, top: 0 })
+          .animation({ duration: 1000, curve: Curve.Linear })
+      }
+      .width('100%')
+      .padding(16)
+      .backgroundColor($r('app.color.card_background'))
+      .borderRadius($r('app.float.card_corner_radius'))
+      .scale({ x: this.kimiCardScale, y: this.kimiCardScale })
+    }
+  }
+
   @Builder
   LatestSessionCard() {
     Column({ space: 10 }) {
@@ -1200,6 +1330,8 @@ struct Index {
           }
 
           this.BalanceCard()
+
+          this.KimiBalanceCard()
 
           this.LatestSessionCard()
 

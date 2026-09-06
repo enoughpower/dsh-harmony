@@ -321,6 +321,8 @@ function cleanSummary(t) {
 const BALANCE_INTERVAL = 5 * 60 * 1000;
 let lastBalance = null;            // {currency,total,available,fetchedAt}
 let balanceLowNotified = false;
+let lastKimiBalance = null;        // {currency,total,available,fetchedAt}
+let kimiBalanceLowNotified = false;
 async function getDeepseekKey() {
   if (process.env.DEEPSEEK_API_KEY) return process.env.DEEPSEEK_API_KEY;
   try {
@@ -328,6 +330,18 @@ async function getDeepseekKey() {
     if (existsSync(f)) {
       const t = readFileSync(f, 'utf8');
       const m = t.match(/^\s*DEEPSEEK_API_KEY:\s*([^\r\n]+)/m);
+      if (m && m[1]) return m[1].trim().replace(/^["']|["']$/g, '');
+    }
+  } catch { }
+  return '';
+}
+async function getKimiKey() {
+  if (process.env.KIMI_API_KEY) return process.env.KIMI_API_KEY;
+  try {
+    const f = (process.env.HOME || process.env.USERPROFILE || '') + '/.dsh/.credentials.yaml';
+    if (existsSync(f)) {
+      const t = readFileSync(f, 'utf8');
+      const m = t.match(/^\s*KIMI_API_KEY:\s*([^\r\n]+)/m);
       if (m && m[1]) return m[1].trim().replace(/^["']|["']$/g, '');
     }
   } catch { }
@@ -365,6 +379,41 @@ async function refreshBalance() {
     console.log('[balance] updated', JSON.stringify(lastBalance));
   } catch (e) {
     console.log('[balance] err', e.message);
+  }
+}
+
+async function refreshKimiBalance() {
+  try {
+    const key = await getKimiKey();
+    if (!key) { console.log('[kimi-balance] no kimi key'); return; }
+    const res = await fetch('https://api.moonshot.ai/v1/users/me/balance', {
+      headers: { 'Authorization': 'Bearer ' + key },
+    });
+    if (res.status !== 200) { console.log('[kimi-balance] HTTP ' + res.status); return; }
+    const j = await res.json();
+    const data = j.data || {};
+    lastKimiBalance = {
+      currency: 'CNY',
+      total: String(data.available_balance ?? '0'),
+      available: true,
+      fetchedAt: Date.now(),
+    };
+    const total = Number(lastKimiBalance.total) || 0;
+    if (!pushSettings.balance) {
+      console.log('[kimi-balance] disabled by settings');
+      return;
+    }
+    const threshold = Number(pushSettings.balanceThreshold) || 5;
+    if (total < threshold && !kimiBalanceLowNotified) {
+      kimiBalanceLowNotified = true;
+      sendCase('💰 Kimi 余额不足', '当前余额 ' + lastKimiBalance.total + ' ' + lastKimiBalance.currency
+        + '，已低于 ' + threshold + '，请及时充值（避免任务中断）', '', 'balance');
+    } else if (total >= threshold) {
+      kimiBalanceLowNotified = false;
+    }
+    console.log('[kimi-balance] updated', JSON.stringify(lastKimiBalance));
+  } catch (e) {
+    console.log('[kimi-balance] err', e.message);
   }
 }
 
@@ -476,7 +525,12 @@ const server = createServer((req, res) => {
   }
   if (req.url === '/api/balance') {
     res.writeHead(200, { 'content-type': 'application/json' });
-    res.end(JSON.stringify({ ok: lastBalance !== null, balance: lastBalance, threshold: pushSettings.balanceThreshold }));
+    res.end(JSON.stringify({
+      ok: lastBalance !== null || lastKimiBalance !== null,
+      balance: lastBalance,
+      kimi: lastKimiBalance,
+      threshold: pushSettings.balanceThreshold
+    }));
     return;
   }
   res.writeHead(404); res.end('{}');
@@ -489,4 +543,6 @@ server.listen(3082, () => {
   // 余额：启动即查一次，之后每 5 分钟刷新
   refreshBalance();
   setInterval(refreshBalance, BALANCE_INTERVAL);
+  refreshKimiBalance();
+  setInterval(refreshKimiBalance, BALANCE_INTERVAL);
 });
