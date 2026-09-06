@@ -336,12 +336,12 @@ async function getDeepseekKey() {
   return '';
 }
 async function getKimiKey() {
-  if (process.env.KIMI_API_KEY) return process.env.KIMI_API_KEY;
+  if (process.env.MOONSHOT_API_KEY) return process.env.MOONSHOT_API_KEY;
   try {
     const f = (process.env.HOME || process.env.USERPROFILE || '') + '/.dsh/.credentials.yaml';
     if (existsSync(f)) {
       const t = readFileSync(f, 'utf8');
-      const m = t.match(/^\s*KIMI_API_KEY:\s*([^\r\n]+)/m);
+      const m = t.match(/^\s*MOONSHOT_API_KEY:\s*([^\r\n]+)/m);
       if (m && m[1]) return m[1].trim().replace(/^["']|["']$/g, '');
     }
   } catch { }
