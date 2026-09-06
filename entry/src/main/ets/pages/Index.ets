@@ -91,6 +91,8 @@ struct Index {
   private balanceTimer: number = -1;
   private balanceChecking: boolean = false;
   private balanceTickTimer: number = -1;
+  /** 5 分钟倒计时剩余 tick（整型计数，避免浮点累减永远到不了 0） */
+  private balanceTickLeft: number = 300;
   private prevBalanceTotal: string = '';
   private connTimer: number = -1;
   private netConn: connection.NetConnection | null = null;
@@ -429,6 +431,7 @@ struct Index {
               if (this.balanceTotal.length > 0 && this.balanceTotal !== this.prevBalanceTotal) {
                 this.prevBalanceTotal = this.balanceTotal;
                 this.balanceProgress = 100;
+                this.balanceTickLeft = 300;
                 this.pulseBalanceCard();
                 // 阈值告警（低于通知设置的阈值 -> 红色）+ 金额滚动动画
                 const numVal = parseFloat(this.balanceTotal);
@@ -597,8 +600,18 @@ struct Index {
       return;
     }
     this.balanceTickTimer = setInterval(() => {
-      if (this.balanceProgress > 0) {
-        this.balanceProgress = Math.max(0, this.balanceProgress - (100 / 300));
+      if (this.balanceTickLeft <= 0) {
+        this.balanceTickLeft = 300;
+      }
+      this.balanceTickLeft -= 1;
+      this.balanceProgress = Math.round((this.balanceTickLeft / 300) * 100);
+      if (this.balanceTickLeft <= 0) {
+        // 一轮 5 分钟倒计时结束：开新一轮 + 立即拉一次余额（余额变化时另有脉冲动画）
+        this.balanceTickLeft = 300;
+        this.balanceProgress = 100;
+        if (!this.balanceChecking) {
+          this.checkBalance();
+        }
       }
     }, 1000);
   }
