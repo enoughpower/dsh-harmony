@@ -386,7 +386,7 @@ async function refreshKimiBalance() {
   try {
     const key = await getKimiKey();
     if (!key) { console.log('[kimi-balance] no kimi key'); return; }
-    const res = await fetch('https://api.moonshot.ai/v1/users/me/balance', {
+    const res = await fetch('https://api.moonshot.cn/v1/users/me/balance', {
       headers: { 'Authorization': 'Bearer ' + key },
     });
     if (res.status !== 200) { console.log('[kimi-balance] HTTP ' + res.status); return; }
