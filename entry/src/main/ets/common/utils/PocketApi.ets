@@ -185,19 +185,6 @@ interface SessionListResult {
   result?: SessionListResultInner;
 }
 
-/** workspace.list 响应（仅声明用到的字段：归档会话 id 集合） */
-interface WorkspaceListValue {
-  archivedSessionIds?: string[];
-}
-
-interface WorkspaceListResultInner {
-  value?: WorkspaceListValue;
-}
-
-interface WorkspaceListResult {
-  result?: WorkspaceListResultInner;
-}
-
 /** session/search 响应 */
 interface SearchValue {
   items?: SearchItemValue[];
@@ -274,6 +261,11 @@ interface SessionAddress {
 export class PocketApi {
   /** 进程内缓存的期望令牌（旧哈希模型，新版不再使用；保留向下兼容） */
   private static expectedToken: string = '';
+  /** 归档会话 id（来自电脑端 push-notify :3082/api/archived，读 DSH 持久化的 workspace.json）。
+   *  内存缓存 30s：WebShell 归档后 App 延迟 ≤30s 生效，避免每次列表刷新都打 3082。 */
+  private static archivedIdsCache: string[] = [];
+  private static archivedAt: number = 0;
+  private static readonly ARCHIVED_TTL: number = 30000;
 
   /** 组装请求鉴权：tokenQuery=明文 PIN（过代理层）；cookie=dsh-auth-*（过 DSH web 层） */
   private static auth(base: string, pin: string): AuthParam {
@@ -391,7 +383,7 @@ export class PocketApi {
     try {
       const parsed = JSON.parse(r.text) as SessionListResult;
       const items = parsed.result?.value?.items ?? [];
-      const archived = await PocketApi.queryArchivedIds(b, pin);
+      const archived = await PocketApi.archivedIdsOf(b);
       const tasks: TaskInfo[] = [];
       for (const it of items) {
         if (it.blank === true) continue;
@@ -422,22 +414,84 @@ export class PocketApi {
     }
   }
 
-  /** 查询归档会话 id 集合（workspace.list 的 archivedSessionIds），用于过滤任务列表中已归档/已删除的会话。 */
-  private static async queryArchivedIds(b: string, pin: string): Promise<string[]> {
-    const r = await PocketApi.rpc(b, pin, 'workspace.list', 'dsh-harmony-archived', 'request', {}, 12000);
-    if (r.code !== 200 || r.text.startsWith('请求异常')) {
-      return [];
+  /** push-notify 服务地址：同主机把 dsh-pocket 端口换成 3082（局域网 IP 直连场景）。 */
+  private static notifyBaseOf(base: string): string {
+    let rest = base;
+    if (rest.startsWith('https://')) {
+      rest = rest.substring(8);
+    } else if (rest.startsWith('http://')) {
+      rest = rest.substring(7);
+    } else {
+      return '';
     }
-    try {
-      const parsed = JSON.parse(r.text) as WorkspaceListResult;
-      const value = parsed.result?.value;
-      if (value === undefined) {
-        return [];
+    const slash = rest.indexOf('/');
+    if (slash >= 0) {
+      rest = rest.substring(0, slash);
+    }
+    const q = rest.indexOf('?');
+    if (q >= 0) {
+      rest = rest.substring(0, q);
+    }
+    let host = rest;
+    if (host.startsWith('[')) {
+      // IPv6：保留方括号主机
+      const end = host.indexOf(']');
+      if (end >= 0) {
+        host = host.substring(0, end + 1);
       }
-      return value.archivedSessionIds ?? [];
-    } catch (e) {
+    } else {
+      const colon = host.lastIndexOf(':');
+      if (colon > 0) {
+        host = host.substring(0, colon);
+      }
+    }
+    return 'http://' + host + ':3082';
+  }
+
+  /** 查询归档会话 id 集合（电脑端 push-notify :3082/api/archived → DSH 持久化 archivedSessionIds）。
+   *  不可达/异常时返回 []（降级为不过滤，保持旧行为）。 */
+  static async archivedIdsOf(base: string): Promise<string[]> {
+    const now = Date.now();
+    if (now - PocketApi.archivedAt < PocketApi.ARCHIVED_TTL) {
+      return PocketApi.archivedIdsCache;
+    }
+    PocketApi.archivedAt = now;
+    const notifyBase = PocketApi.notifyBaseOf(base);
+    if (notifyBase.length === 0) {
+      PocketApi.archivedIdsCache = [];
       return [];
     }
+    const request = http.createHttp();
+    try {
+      const resp = await request.request(notifyBase + '/api/archived', {
+        method: http.RequestMethod.GET,
+        connectTimeout: 2500,
+        readTimeout: 2500
+      });
+      if (resp.responseCode === 200) {
+        const j = JSON.parse(String(resp.result ?? '')) as Record<string, Object>;
+        const raw = j['archivedSessionIds'];
+        const ids: string[] = [];
+        if (raw !== undefined && Array.isArray(raw)) {
+          const rawList = raw as string[];
+          for (const v of rawList) {
+            if (v.length > 0) {
+              ids.push(v);
+            }
+          }
+        }
+        PocketApi.archivedIdsCache = ids;
+        return ids;
+      }
+    } catch (e) {
+    } finally {
+      try {
+        request.destroy();
+      } catch (e2) {
+      }
+    }
+    PocketApi.archivedIdsCache = [];
+    return [];
   }
 
   /** 搜索会话（session/search）。 */
@@ -605,10 +659,24 @@ export class PocketApi {
     try {
       const parsed = JSON.parse(r.text) as SessionListResult;
       const items = parsed.result?.value?.items ?? [];
-      if (items.length === 0) {
+      const archived = await PocketApi.archivedIdsOf(b);
+      // 跳过空白与已归档会话（与 WebShell 一致：归档后不再出现在"最新会话"）
+      let pick: SessionItem | null = null;
+      for (const it of items) {
+        if (it.blank === true) {
+          continue;
+        }
+        const sid = it.sessionId ?? '';
+        if (sid.length > 0 && archived.indexOf(sid) >= 0) {
+          continue;
+        }
+        pick = it;
+        break;
+      }
+      if (pick === null) {
         return { info: null, error: '无会话数据', token: pin };
       }
-      return { info: PocketApi.project(items[0]), error: '', token: pin };
+      return { info: PocketApi.project(pick), error: '', token: pin };
     } catch (e) {
       hilog.warn(DOMAIN, TAG, 'session/list failed: %{public}s', (e as Error).message);
       return { info: null, error: '请求异常: ' + (e as Error).message.slice(0, 60), token: pin };

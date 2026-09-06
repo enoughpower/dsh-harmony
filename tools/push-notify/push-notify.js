@@ -317,7 +317,32 @@ function cleanSummary(t) {
   return s;
 }
 
-// ---- DeepSeek 余额（每 5 分钟查一次 + 低于阈值告警推送） ----
+// ---- 归档会话 id（DSH 桌面 ~/.dsh/storages/workspace.json 的 global.archivedSessionIds） ----
+// 说明：dsh-pocket 不代理 workspace 接口，App 无法经 :3081 拿到归档集合；
+// 由 push-notify 读本机 DSH 持久化文件提供 :3082/api/archived，App 据此隐藏已归档会话（与 WebShell 一致）。
+const ARCHIVE_FILE = (process.env.HOME || process.env.USERPROFILE || '') + '/.dsh/storages/workspace.json';
+let archivedCache = { ids: [], at: 0 };
+function readArchivedIds() {
+  const now = Date.now();
+  if (now - archivedCache.at < 30000) return archivedCache.ids;
+  try {
+    if (existsSync(ARCHIVE_FILE)) {
+      const j = JSON.parse(readFileSync(ARCHIVE_FILE, 'utf8'));
+      const g = (j && j.global) || {};
+      const raw = Array.isArray(g.archivedSessionIds) ? g.archivedSessionIds : [];
+      const ids = [];
+      for (const v of raw) { if (typeof v === 'string' && v.length > 0) ids.push(v); }
+      archivedCache = { ids, at: now };
+      return ids;
+    }
+  } catch (e) {
+    console.log('[archived] read err', e.message);
+  }
+  archivedCache = { ids: [], at: now };
+  return [];
+}
+
+// ---- DeepSeek / Kimi 余额（每 5 分钟查一次 + 低于阈值告警推送） ----
 const BALANCE_INTERVAL = 5 * 60 * 1000;
 let lastBalance = null;            // {currency,total,available,fetchedAt}
 let balanceLowNotified = false;
@@ -531,6 +556,11 @@ const server = createServer((req, res) => {
       kimi: lastKimiBalance,
       threshold: pushSettings.balanceThreshold
     }));
+    return;
+  }
+  if (req.url === '/api/archived') {
+    res.writeHead(200, { 'content-type': 'application/json' });
+    res.end(JSON.stringify({ ok: true, archivedSessionIds: readArchivedIds() }));
     return;
   }
   res.writeHead(404); res.end('{}');
