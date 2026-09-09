@@ -10,6 +10,10 @@ import { parseMarkdown, parseInline, MdBlock, MdInlineNode } from '../common/uti
 export struct MarkdownText {
   @Prop text: string = '';
   @StorageLink('osThemeIsDark') osThemeIsDark: boolean = false;
+  /** 取消选中令牌：父页面点空白时递增，触发文本节点重建以清掉系统文字选中态 */
+  @StorageLink('selectionClearToken') selectionClearToken: number = 0;
+  /** 选中态回调：告知父页面当前是否有文字处于选中状态 */
+  onSelectionActive: (active: boolean) => void = (active: boolean) => {};
 
   private codeBg(): string {
     return this.osThemeIsDark ? '#232B38' : '#E6EEFF';
@@ -50,9 +54,13 @@ export struct MarkdownText {
         .fontWeight(FontWeight.Bold)
         .fontColor($r('app.color.text_primary'))
         .width('100%')
+        .copyOption(CopyOptions.LocalDevice)
+        .onTextSelectionChange((s: number, e: number) => { this.onSelectionActive(s !== e); })
     } else if (b.kind === 'para') {
       Text() { this.Inline(b.text) }
         .width('100%')
+        .copyOption(CopyOptions.LocalDevice)
+        .onTextSelectionChange((s: number, e: number) => { this.onSelectionActive(s !== e); })
     } else if (b.kind === 'code') {
       Column() {
         Text(b.text)
@@ -61,6 +69,8 @@ export struct MarkdownText {
           .fontFamily('monospace')
           .width('100%')
           .textAlign(TextAlign.Start)
+          .copyOption(CopyOptions.LocalDevice)
+        .onTextSelectionChange((s: number, e: number) => { this.onSelectionActive(s !== e); })
       }
       .width('100%')
       .padding(12)
@@ -77,6 +87,8 @@ export struct MarkdownText {
               .fontWeight(FontWeight.Bold)
             Text() { this.Inline(it) }
               .layoutWeight(1)
+              .copyOption(CopyOptions.LocalDevice)
+        .onTextSelectionChange((s: number, e: number) => { this.onSelectionActive(s !== e); })
           }
           .width('100%')
           .alignItems(VerticalAlign.Top)
@@ -92,6 +104,8 @@ export struct MarkdownText {
               Text() { this.Inline(cell) }
                 .layoutWeight(1)
                 .fontSize(12)
+                .copyOption(CopyOptions.LocalDevice)
+        .onTextSelectionChange((s: number, e: number) => { this.onSelectionActive(s !== e); })
                 .fontWeight(ri === 0 ? FontWeight.Bold : FontWeight.Normal)
                 .fontColor($r('app.color.text_primary'))
                 .padding({ left: 6, right: 6, top: 5, bottom: 5 })
@@ -111,6 +125,8 @@ export struct MarkdownText {
       Text() { this.Inline(b.text) }
         .fontColor($r('app.color.text_secondary'))
         .borderWidth({ left: 3 })
+        .copyOption(CopyOptions.LocalDevice)
+        .onTextSelectionChange((s: number, e: number) => { this.onSelectionActive(s !== e); })
         .borderColor({ left: this.osThemeIsDark ? '#3A414C' : '#C9CDD6' })
         .padding({ left: 8 })
         .width('100%')
@@ -123,7 +139,7 @@ export struct MarkdownText {
     Column({ space: 6 }) {
       ForEach(parseMarkdown(this.text), (b: MdBlock) => {
         this.Block(b)
-      }, (b: MdBlock) => b.kind + b.text.slice(0, 20) + b.items.length)
+      }, (b: MdBlock) => this.selectionClearToken + '|' + b.kind + b.text.slice(0, 20) + b.items.length)
     }
     .width('100%')
     .alignItems(HorizontalAlign.Start)

@@ -1,7 +1,7 @@
 import { router, promptAction, KeyboardAvoidMode as KbAvoidMode } from '@kit.ArkUI';
 import { common } from '@kit.AbilityKit';
 import { webSocket } from '@kit.NetworkKit';
-import { BusinessError } from '@kit.BasicServicesKit';
+import { BusinessError, pasteboard } from '@kit.BasicServicesKit';
 import { photoAccessHelper } from '@kit.MediaLibraryKit';
 import { image } from '@kit.ImageKit';
 import { fileIo } from '@kit.CoreFileKit';
@@ -10,6 +10,7 @@ import { ConnectionStore } from '../common/store/ConnectionStore';
 import { AppPrefs } from '../common/store/AppPrefs';
 import { PocketApi, SessionMessage, PromptContentPart, SessionImage } from '../common/utils/PocketApi';
 import { MessageDataSource } from '../common/utils/MessageDataSource';
+import { buildTranscript } from '../common/utils/Transcript';
 import { CardSync } from '../common/store/CardSync';
 import { WindowBar } from '../common/utils/WindowBar';
 import { BackButton } from '../components/BackButton';
@@ -73,6 +74,9 @@ struct SessionDetailPage {
   private lastMsgSig: string = '';
   private loadedOnce: boolean = false;
   @State nearBottom: boolean = true;
+  /** 取消文字选中：点空白区域时递增令牌，MarkdownText 重建文本以清掉系统选中态 */
+  @StorageLink('selectionClearToken') selectionClearToken: number = 0;
+  @State selectionActive: boolean = false;
 
   aboutToAppear(): void {
     // 键盘避让改为 RESIZE：键盘弹起时在底部压缩内容、顶部保持让出状态栏，避免整页上移顶到状态栏
@@ -342,6 +346,25 @@ struct SessionDetailPage {
     this.loadingMsg = false;
   }
 
+  /** 「复制全部」：把当前对话按「我/AI」拼成纯文本写入系统剪贴板。 */
+  private async copyAllMessages(): Promise<void> {
+    const messages: SessionMessage[] = this.msgSource.snapshot();
+    const text: string = buildTranscript(messages);
+    if (text.length === 0) {
+      promptAction.showToast({ message: '暂无消息' });
+      return;
+    }
+    try {
+      const data = pasteboard.createData(pasteboard.MIMETYPE_TEXT_PLAIN, text);
+      await pasteboard.getSystemPasteboard().setData(data);
+      promptAction.showToast({ message: '已复制 ' + messages.length + ' 条消息' });
+    } catch (e) {
+      const err = e as BusinessError;
+      console.error('[detail] copy all failed: %{public}s', err.message);
+      promptAction.showToast({ message: '复制失败' });
+    }
+  }
+
   private openWorkbench(): void {
     const n = UrlUtils.normalize(this.baseUrl);
     if (n !== null) {
@@ -454,7 +477,7 @@ struct SessionDetailPage {
         }
         .width('100%')
 
-        Row() {
+        Row({ space: 8 }) {
           Text('对话')
             .fontSize(14)
             .fontWeight(FontWeight.Medium)
@@ -462,6 +485,17 @@ struct SessionDetailPage {
             .layoutWeight(1)
           if (this.loadingMsg) {
             LoadingProgress().width(16).height(16)
+          }
+          if (this.msgCount > 0) {
+            Button('复制全部')
+              .height(28)
+              .fontSize(12)
+              .fontColor($r('app.color.primary'))
+              .backgroundColor($r('app.color.button_surface'))
+              .padding({ left: 10, right: 10 })
+              .onClick(() => {
+                this.copyAllMessages();
+              })
           }
         }
         .width('100%')
@@ -483,7 +517,12 @@ struct SessionDetailPage {
                     .padding({ left: 6, right: 6, top: 2, bottom: 2 })
                     .borderRadius(4)
                     .alignSelf(ItemAlign.Start)
-                  MarkdownText({ text: m.text })
+                  MarkdownText({
+                    text: m.text,
+                    onSelectionActive: (active: boolean) => {
+                      this.selectionActive = active;
+                    }
+                  })
                     .width('100%')
                   if (m.images.length > 0) {
                     Row({ space: 8 }) {
@@ -531,6 +570,9 @@ struct SessionDetailPage {
           .onScrollIndex((start: number, end: number) => {
             // 用户是否停在底部（含底部“思考中”提示项）；读上方时停止自动跟随
             this.nearBottom = end >= this.msgCount - 1;
+          })
+          .onClick(() => {
+            this.dismissSelection();
           })
         }
 
@@ -620,11 +662,17 @@ struct SessionDetailPage {
       .padding({ left: 20, right: 20, top: this.statusBarH + 16, bottom: 20 })
       .backgroundColor($r('app.color.page_background'))
       .alignItems(HorizontalAlign.Center)
+      .onClick(() => {
+        this.dismissSelection();
+      })
     }
     .width('100%')
     .height('100%')
     .backgroundColor($r('app.color.page_background'))
     .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.TOP, SafeAreaEdge.BOTTOM])
+    .onClick(() => {
+      this.dismissSelection();
+    })
   }
 
   private pickingSeq: boolean = false;
@@ -764,6 +812,14 @@ struct SessionDetailPage {
       promptAction.showToast({ message: '已发送' });
     } else {
       promptAction.showToast({ message: '发送失败: ' + r.error });
+    }
+  }
+
+  /** 点击空白区域：若存在文字选中，递增令牌重建消息文本以取消选中。 */
+  private dismissSelection(): void {
+    if (this.selectionActive) {
+      this.selectionActive = false;
+      this.selectionClearToken = this.selectionClearToken + 1;
     }
   }
 

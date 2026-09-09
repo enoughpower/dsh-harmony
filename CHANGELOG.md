@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-09-08（会话详情全选复制）
+
+### feat
+- **会话详情「复制全部」**：对话标题栏新增按钮，一键把当前会话按「我/AI」拼成纯文本写入系统剪贴板（图片以 `[图片×N]` 占位，图片二进制不入剪贴板），成功后 toast 提示条数。
+- **消息文本长按选中**：`MarkdownText` 全部文本块（标题/段落/代码块/列表/表格/引用）加 `copyOption(CopyOptions.LocalDevice)`，长按弹出系统文本菜单，支持全选/复制单条消息。
+- 新增纯逻辑工具 `common/utils/Transcript.ets`（`buildTranscript`）+ 单测 `entry/src/test/test/Transcript.test.ets`（角色标签 / 图片占位 / 空列表），已注册进 `List.test.ets`。
+
 ## v2.0.1（2026-09-05）
 
 - 发布说明见 [release/RELEASE_NOTES.v2.0.1.md](release/RELEASE_NOTES.v2.0.1.md)。

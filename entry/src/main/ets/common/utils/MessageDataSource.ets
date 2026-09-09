@@ -30,6 +30,11 @@ export class MessageDataSource implements IDataSource {
     }
   }
 
+  /** 当前消息快照（只读副本，供「复制全部」等场景使用）。 */
+  snapshot(): SessionMessage[] {
+    return this.messages.slice();
+  }
+
   /** 整体替换消息并通知 LazyForEach 重载。 */
   update(list: SessionMessage[]): void {
     const arr: SessionMessage[] = [];
