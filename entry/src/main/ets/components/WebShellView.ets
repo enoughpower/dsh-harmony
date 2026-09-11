@@ -1,9 +1,6 @@
 import { webview } from '@kit.ArkWeb';
 import { promptAction } from '@kit.ArkUI';
 import { picker, fileUri, fileIo } from '@kit.CoreFileKit';
-import { photoAccessHelper } from '@kit.MediaLibraryKit';
-import { image } from '@kit.ImageKit';
-import { util } from '@kit.ArkTS';
 import { http } from '@kit.NetworkKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { common } from '@kit.AbilityKit';
@@ -17,7 +14,7 @@ const TAG = 'DSHHarmony';
 /**
  * WebShellView：dsh-pocket 网页的 ArkWeb 套壳展示（可复用）。
  * 供「窄屏 WebShell 页」与「宽屏右栏」两处使用；
- * 只负责 Web 渲染/进度/下载/图片注入/主题，不含页面级路由与左右分栏。
+ * 只负责 Web 渲染/进度/下载/主题，不含页面级路由与左右分栏。
  */
 @Component
 export struct WebShellView {
@@ -106,49 +103,6 @@ export struct WebShellView {
     this.refreshing = true; this.loading = true;
     try { this.controller.refresh(); } catch (e) {}
     setTimeout(() => { this.refreshing = false; }, 1500);
-  }
-
-  private pickAndInjectImage(): void {
-    try {
-      const options = new photoAccessHelper.PhotoSelectOptions();
-      options.MIMEType = photoAccessHelper.PhotoViewMIMETypes.IMAGE_TYPE;
-      options.maxSelectNumber = 1;
-      const photoPicker = new photoAccessHelper.PhotoViewPicker();
-      photoPicker.select(options).then((result: photoAccessHelper.PhotoSelectResult) => {
-        const uris = result.photoUris ?? [];
-        if (uris.length === 0) return;
-        this.injectImageToWeb(uris[0]);
-      }).catch((e: BusinessError) => {});
-    } catch (e) {}
-  }
-
-  private injectImageToWeb(uri: string): void {
-    const doInject = (b64: string): void => {
-      const name = 'dsh-upload-' + Date.now() + '.jpg';
-      const js = "(function(){" +
-        "try{" + "var b64='" + b64 + "';" + "var name='" + name + "';" +
-        "var bin=atob(b64);" + "var bytes=new Uint8Array(bin.length);" +
-        "for(var i=0;i<bin.length;i++){bytes[i]=bin.charCodeAt(i);}" +
-        "var file=new File([bytes],name,{type:'image/jpeg'});" +
-        "var dt=new DataTransfer();" + "dt.items.add(file);" +
-        "document.dispatchEvent(new DragEvent('drop',{dataTransfer:dt,bubbles:true,cancelable:true}));" +
-        "return 'ok';" + "}catch(e){return 'err:'+e.message;}" + "})()";
-      this.controller.runJavaScript(js).then((ret: string) => {}).catch((e: BusinessError) => {});
-    };
-    let fp: fileIo.File | null = null;
-    try { fp = fileIo.openSync(uri, fileIo.OpenMode.READ_ONLY); } catch (e) { return; }
-    try {
-      const imgSource = image.createImageSource(fp.fd);
-      imgSource.createPixelMap().then((pm: image.PixelMap) => {
-        const packer = image.createImagePacker();
-        const opts: image.PackingOption = { 'format': 'image/jpeg', 'quality': 80 };
-        packer.packing(pm, opts).then((data: ArrayBuffer) => {
-          try { imgSource.release(); packer.release(); pm.release(); fileIo.closeSync(fp); } catch (e) {}
-          const b64 = new util.Base64Helper().encodeToStringSync(new Uint8Array(data));
-          doInject(b64);
-        }).catch((e: BusinessError) => {});
-      }).catch((e: BusinessError) => {});
-    } catch (e) { try { fileIo.closeSync(fp); } catch (e2) {} }
   }
 
   private ensureDownloadUri(): void {
@@ -283,11 +237,6 @@ export struct WebShellView {
             .color($r('app.color.primary')).width('100%').height(2).position({ x: 0, y: 0 })
         }
 
-        Button() {
-          SymbolGlyph($r('sys.symbol.ohos_photo')).fontSize(20).fontColor([$r('app.color.text_primary')])
-        }
-        .width(44).height(44).borderRadius(22).backgroundColor('#26000000').position({ x: '80%', y: '86%' })
-        .onClick(() => { this.pickAndInjectImage(); })
       }
       .layoutWeight(1).width('100%').backgroundColor(this.stripBg())
     }
