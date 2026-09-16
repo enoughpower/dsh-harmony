@@ -26,6 +26,10 @@ interface WorkspaceGroup {
  */
 @Component
 export struct SessionListTab {
+  /** 容器提供时：会话详情在容器内（平板左栏）打开；否则 push 独立详情页 */
+  onOpenDetail: ((sessionId: string, title: string, objective: string, phase: string, running: boolean, turns: number, steps: number, updatedAt: number) => void) | null = null;
+  /** 容器提供时：打开工作台交给容器（宽屏切右栏）；否则 push 独立 WebShell 页 */
+  onOpenWorkbench: ((url: string) => void) | null = null;
   @State tasks: TaskInfo[] = [];
   @State loading: boolean = true;
   @State error: string = '';
@@ -191,6 +195,10 @@ export struct SessionListTab {
   }
 
   private openDetail(t: TaskInfo): void {
+    if (this.onOpenDetail !== null) {
+      this.onOpenDetail(t.sessionId, t.title, t.objective, t.phase, t.running, t.turns, t.steps, t.updatedAt);
+      return;
+    }
     router.pushUrl({
       url: 'pages/SessionDetailPage',
       params: {
@@ -208,6 +216,10 @@ export struct SessionListTab {
   }
 
   private openTask(url: string): void {
+    if (this.onOpenWorkbench !== null) {
+      this.onOpenWorkbench(url);
+      return;
+    }
     const normalized = UrlUtils.normalize(url);
     if (normalized === null) {
       return;

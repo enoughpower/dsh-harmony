@@ -22,6 +22,7 @@ import { HistoryView } from '../components/HistoryView';
 import { DeviceUtils } from '../common/utils/DeviceUtils';
 import { FeatureFlags } from '../common/config/FeatureFlags';
 import { SessionListTab } from './TasksPage';
+import { SessionDetailView } from '../components/SessionDetailView';
 
 const DOMAIN = 0x0000;
 const TAG = 'DSHHarmony';
@@ -84,8 +85,18 @@ struct Index {
   @StorageLink('pendingDshUrl') pendingDshUrl: string = '';
   /** 内网直连与公网隧道都不可用（首页常驻提示） */
   @State connFailed: boolean = false;
-  /** 左栏导航栈：home / settings / history */
+  /** 左栏导航栈：home / settings / history / detail */
   @State leftStack: string[] = ['home'];
+  /** 平板左栏内嵌会话详情的参数（宽屏时使用；窄屏仍走独立详情页） */
+  @State detailSessionId: string = '';
+  @State detailTitle: string = '';
+  @State detailObjective: string = '';
+  @State detailPhase: string = '';
+  @State detailRunning: boolean = false;
+  @State detailTurns: number = 0;
+  @State detailSteps: number = 0;
+  @State detailUpdatedAt: number = 0;
+  @State detailBase: string = '';
   private pushTimer: number = -1;
   private sessionTimer: number = -1;
   private balanceTimer: number = -1;
@@ -854,6 +865,42 @@ struct Index {
     });
   }
 
+  /** 打开会话详情：宽屏(平板)进左栏，窄屏(手机)push 独立详情页。 */
+  private openSessionDetail(url: string, sessionId: string, title: string, objective: string, phase: string,
+    running: boolean, turns: number, steps: number, updatedAt: number): void {
+    this.activeConnUrl = url;
+    this.activeBase = url;
+    if (this.wide) {
+      this.detailSessionId = sessionId;
+      this.detailTitle = title;
+      this.detailObjective = objective;
+      this.detailPhase = phase;
+      this.detailRunning = running;
+      this.detailTurns = turns;
+      this.detailSteps = steps;
+      this.detailUpdatedAt = updatedAt;
+      this.detailBase = url;
+      if (this.leftStackTop() !== 'detail') {
+        this.pushLeft('detail');
+      }
+    } else {
+      router.pushUrl({
+        url: 'pages/SessionDetailPage',
+        params: {
+          'sessionId': sessionId,
+          'title': title,
+          'objective': objective,
+          'phase': phase,
+          'running': String(running),
+          'turns': String(turns),
+          'steps': String(steps),
+          'updatedAt': String(updatedAt),
+          'url': url
+        }
+      });
+    }
+  }
+
   /** 打开最新会话的详情页。 */
   private openLatestSessionDetail(): void {
     const ls = this.latestSession;
@@ -866,20 +913,7 @@ struct Index {
       promptAction.showToast({ message: '请先连接电脑端' });
       return;
     }
-    router.pushUrl({
-      url: 'pages/SessionDetailPage',
-      params: {
-        'sessionId': ls.sessionId,
-        'title': ls.title,
-        'objective': ls.objective,
-        'phase': ls.phase,
-        'running': String(ls.running),
-        'turns': String(ls.turns),
-        'steps': String(ls.steps),
-        'updatedAt': String(ls.updatedAt),
-        'url': base
-      }
-    });
+    this.openSessionDetail(base, ls.sessionId, ls.title, ls.objective, ls.phase, ls.running, ls.turns, ls.steps, ls.updatedAt);
   }
 
   /** 服务卡片点击：默认进"原生会话详情页"（该连接的最近会话）；拿不到会话则留在首页。 */
@@ -891,21 +925,7 @@ struct Index {
       const q = await PocketApi.latestSession(url, pin);
       const ls = q.info;
       if (ls !== null && ls.sessionId.length > 0) {
-        this.activeBase = url;
-        router.pushUrl({
-          url: 'pages/SessionDetailPage',
-          params: {
-            'sessionId': ls.sessionId,
-            'title': ls.title,
-            'objective': ls.objective,
-            'phase': ls.phase,
-            'running': String(ls.running),
-            'turns': String(ls.turns),
-            'steps': String(ls.steps),
-            'updatedAt': String(ls.updatedAt),
-            'url': url
-          }
-        });
+        this.openSessionDetail(url, ls.sessionId, ls.title, ls.objective, ls.phase, ls.running, ls.turns, ls.steps, ls.updatedAt);
         return;
       }
     } catch (e) {
@@ -926,22 +946,7 @@ struct Index {
 
   /** 通知/卡片带了具体 sessionId：直接打开该会话的原生详情页（会话数据由详情页自取）。 */
   private openSessionById(url: string, sessionId: string): void {
-    this.activeConnUrl = url;
-    this.activeBase = url;
-    router.pushUrl({
-      url: 'pages/SessionDetailPage',
-      params: {
-        'sessionId': sessionId,
-        'title': '',
-        'objective': '',
-        'phase': '',
-        'running': 'false',
-        'turns': '0',
-        'steps': '0',
-        'updatedAt': '0',
-        'url': url
-      }
-    });
+    this.openSessionDetail(url, sessionId, '', '', '', false, 0, 0, 0);
   }
 
   @Builder
@@ -1225,6 +1230,13 @@ struct Index {
       const nowWide = DeviceUtils.shouldSplit(w, h);
       if (nowWide !== this.wide) {
         this.wide = nowWide;
+        // 切回窄屏时左栏不再展示详情（窄屏详情走独立页）
+        if (!nowWide && this.leftStackTop() === 'detail') {
+          this.leftStack = this.leftStack.filter((r: string) => r !== 'detail');
+          if (this.leftStack.length === 0) {
+            this.leftStack = ['home'];
+          }
+        }
       }
     })
   }
@@ -1317,6 +1329,30 @@ struct Index {
       .width('100%')
       .height('100%')
       .transition(this.routeTransition())
+    } else if (this.leftStackTop() === 'detail') {
+      Column() {
+        SessionDetailView({
+          sessionId: this.detailSessionId,
+          title: this.detailTitle,
+          objective: this.detailObjective,
+          phase: this.detailPhase,
+          running: this.detailRunning,
+          turns: this.detailTurns,
+          steps: this.detailSteps,
+          updatedAt: this.detailUpdatedAt,
+          baseUrl: this.detailBase,
+          embedded: true,
+          onBack: () => {
+            this.popLeft();
+          },
+          onOpenWorkbench: () => {
+            this.navigateWeb(this.detailBase);
+          }
+        })
+      }
+      .width('100%')
+      .height('100%')
+      .transition(this.routeTransition())
     } else {
       Column() {
         this.MainContent()
@@ -1366,7 +1402,15 @@ struct Index {
         }))
 
       TabContent() {
-        SessionListTab()
+        SessionListTab({
+          onOpenDetail: (sessionId: string, title: string, objective: string, phase: string, running: boolean, turns: number, steps: number, updatedAt: number) => {
+            const base = this.activeBase.length > 0 ? this.activeBase : this.webUrl;
+            this.openSessionDetail(base, sessionId, title, objective, phase, running, turns, steps, updatedAt);
+          },
+          onOpenWorkbench: (url: string) => {
+            this.navigateWeb(url);
+          }
+        })
       }
       .tabBar(new BottomTabBarStyle($r('app.media.tab_list'), '会话列表')
         .labelStyle({
