@@ -1,5 +1,17 @@
 # Changelog
 
+## v2.0.2（2026-09-20）
+
+- 发布说明见 [release/RELEASE_NOTES.v2.0.2.md](release/RELEASE_NOTES.v2.0.2.md)。
+- 自 v2.0.1 以来的主要变更：
+  - **首页双 Tab + 会话列表**：底部悬浮胶囊 TabBar（官方 HdsTabs）、会话列表按工作区（cwd）分组、下拉刷新强制重建修复。
+  - **DeepSeek / Kimi 余额**：新增 Kimi 余额卡（同款样式，密钥读 `MOONSHOT_API_KEY`，端点 `api.moonshot.cn`）；余额圆环倒计时结束自动刷新并重置。
+  - **归档过滤**：电脑端 push-notify 暴露 `/api/archived`（读 DSH `workspace.json`），会话列表与「最新会话」隐藏已归档会话，与 WebShell 一致。
+  - **会话详情**：点空白区域取消文字选中；平板宽屏下详情内嵌入左栏（与设置/历史一致），不再全屏。
+  - **连接健壮性**：RPC 短窗去重 + 5xx 自动重试。
+  - **上架准备**：移除受限权限 `READ_WRITE_DOWNLOAD_DIRECTORY`；新增 `BALANCE_ENABLED`（上架版关闭余额卡与 :3082 请求）；重写 `build-store.sh`（`--check` 体检 / `--install` 商店版行为包侧载）；新增 `docs/STORE.md`。
+  - **其他**：移除自实现的相册图片注入入口；TabBar 底部渐变跟随深色主题；接入 DevEco CLI 与真机 UI 冒烟工具链。
+
 ## 2026-09-08（会话详情全选复制）
 
 ### feat
