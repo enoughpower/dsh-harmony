@@ -61,6 +61,15 @@ dsh-pocket 安装与使用见其 [README](https://github.com/shaobeichen/dsh-poc
 3. 打开 App → 「扫码连接」扫电脑屏幕上的二维码 → 自动进入 DSH 界面
 4. 之后打开 App 可从历史记录一键直达；公网连接需在网页内输入 dsh-pocket 设置的 8 位 PIN
 
+## 上架（AppGallery）
+
+同一分支可产出自用全功能版与**上架版**；功能取舍、权限白名单与检查清单见 [docs/STORE.md](docs/STORE.md)。
+
+- **保留**：扫码连接 / ArkWeb 控制台 / 原生会话列表与详情 / 平板双栏 / 沉浸式与深色 / 服务卡片 / 余额卡（读用户自建电脑服务）
+- **裁剪（上架版）**：Push Kit 推送与通知权限、AGC 配置、受限的 `READ_WRITE_DOWNLOAD_DIRECTORY` 权限（导出改用系统文件选择器）
+- **权限**：上架包仅声明 3 个 —— `INTERNET` / `GET_NETWORK_INFO` / `CAMERA`
+- **构建**：`./scripts/build-store.sh --check` 体检 → `./scripts/build-store.sh <versionCode>` 产出 `release/*.app`
+
 ## 本地开发
 
 ```bash
@@ -68,6 +77,8 @@ dsh-pocket 安装与使用见其 [README](https://github.com/shaobeichen/dsh-poc
 ./scripts/build.sh              # 构建 debug HAP（输出 entry/build/.../*.hap）
 ./scripts/build.sh release      # release 构建（未签名）
 ./scripts/build.sh --install    # 构建并安装到已连接设备
+./scripts/build-store.sh --check # 上架体检（权限白名单/推送开关/签名配置）
+./scripts/build-store.sh 1000007 # 构建 AppGallery 上架包（release/*.app）
 ./scripts/smoke.sh              # 真机冒烟：安装→启动→UI 校验→日志检查→卸载
 ./scripts/unit-test.sh          # 单测（需设备；或在 DevEco 内 Run Test 配置）
 ./scripts/devecocli.sh          # DevEco CLI 统一入口（toolchain/device/ui/docs/lint/mcp）

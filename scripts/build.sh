@@ -1,22 +1,28 @@
 #!/usr/bin/env bash
-# build.sh —— 命令行构建 DSH Harmony HAP。
+# build.sh —— 命令行构建 DSH Harmony HAP（自用 / 调试）。
+# 上架包（AppGallery，含推送/AGC/权限裁剪）请用: ./scripts/build-store.sh
 # 用法:
-#   ./scripts/build.sh            # 构建 debug HAP
-#   ./scripts/build.sh release    # 构建 release HAP（无签名）
-#   ./scripts/build.sh --install  # 构建并安装到已连接设备
+#   ./scripts/build.sh                      # 构建 debug HAP（product=default）
+#   ./scripts/build.sh release              # release 构建优化（签名仍按产品 default）
+#   ./scripts/build.sh --product release    # 指定 build-profile 产品（release=发布证书，禁 hdc 侧载）
+#   ./scripts/build.sh --install            # 构建并安装到已连接设备
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 # shellcheck source=scripts/dev-tools.sh
 source "$ROOT/scripts/dev-tools.sh"
 
 MODE="debug"
+PRODUCT="default"
 INSTALL=0
-for arg in "$@"; do
-  case "$arg" in
+while [ $# -gt 0 ]; do
+  case "$1" in
     release) MODE="release" ;;
+    debug) MODE="debug" ;;
+    --product) PRODUCT="${2:?--product 需要参数}"; shift ;;
     --install) INSTALL=1 ;;
-    *) echo "未知参数: $arg" >&2; exit 2 ;;
+    *) echo "未知参数: $1" >&2; exit 2 ;;
   esac
+  shift
 done
 
 if [ -z "${HVIGORW:-}" ]; then
@@ -31,10 +37,13 @@ else
   "$OHPM" install --all
 fi
 
-echo "==> hvigorw assembleHap ($MODE)"
-"$HVIGORW" --mode module -p module=entry@default -p buildMode=$MODE assembleHap
+echo "==> hvigorw assembleHap (product=$PRODUCT, mode=$MODE)"
+"$HVIGORW" --mode module -p module=entry@default -p product="$PRODUCT" -p buildMode="$MODE" assembleHap
 
-HAP="$(find "$ROOT/entry/build" -name "entry-default.hap" -path "*outputs*" 2>/dev/null | head -1)"
+HAP="$(find "$ROOT/entry/build" -name "entry-default-signed.hap" -path "*outputs*" 2>/dev/null | head -1)"
+if [ -z "$HAP" ]; then
+  HAP="$(find "$ROOT/entry/build" -name "entry-default.hap" -path "*outputs*" 2>/dev/null | head -1)"
+fi
 if [ -z "$HAP" ]; then
   HAP="$(find "$ROOT/entry/build" -name "*.hap" 2>/dev/null | head -1)"
 fi
