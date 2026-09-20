@@ -61,6 +61,11 @@ if grep -q 'PUSH_ENABLED: boolean = true' "$FF"; then
 else
   info "PUSH_ENABLED 已为 false"
 fi
+if grep -q 'BALANCE_ENABLED: boolean = true' "$FF"; then
+  info "BALANCE_ENABLED=true（上架版将临时关闭余额卡与 :3082 余额请求）"
+else
+  info "BALANCE_ENABLED 已为 false"
+fi
 [ -f "$AGC" ] && info "发现 AGC 配置，构建时将移出（不入上架包）" || info "无 AGC 配置（上架版无需）"
 grep -q '"name": "release"' build-profile.json5 || fail "build-profile.json5 缺少 release 签名配置"
 info "release 签名配置存在"
@@ -87,7 +92,9 @@ restore() {
 trap restore EXIT
 
 echo "==> 临时裁剪"
-sed -i '' 's/static readonly PUSH_ENABLED: boolean = true;/static readonly PUSH_ENABLED: boolean = false;/' "$FF"
+sed -i '' \
+  -e 's/static readonly PUSH_ENABLED: boolean = true;/static readonly PUSH_ENABLED: boolean = false;/' \
+  -e 's/static readonly BALANCE_ENABLED: boolean = true;/static readonly BALANCE_ENABLED: boolean = false;/' "$FF"
 python3 - "$APPJSON" "$VC" <<'PY'
 import re, sys
 p, vc = sys.argv[1], sys.argv[2]
@@ -95,7 +102,7 @@ s = open(p, encoding='utf-8').read()
 open(p, 'w', encoding='utf-8').write(re.sub(r'"versionCode":\s*\d+', '"versionCode": ' + vc, s))
 PY
 if [ -f "$AGC" ]; then AGC_BAK="$(mktemp -t agconnect)"; mv "$AGC" "$AGC_BAK"; fi
-info "PUSH_ENABLED=false, versionCode=$VC"
+info "PUSH_ENABLED=false, BALANCE_ENABLED=false, versionCode=$VC"
 
 echo "==> 构建 .app（product=release, buildMode=release）"
 "$HVIGORW" --mode project -p product=release -p buildMode=release assembleApp --no-daemon

@@ -181,13 +181,15 @@ struct Index {
         }, 15000);
       }
     }
-    // DeepSeek 余额（立即 + 60s 轮询；仅局域网可达 3082 时显示）
-    this.checkBalance();
-    this.startBalanceCountdown();
-    if (this.balanceTimer < 0) {
-      this.balanceTimer = setInterval(() => {
-        this.checkBalance();
-      }, 60000);
+    // DeepSeek / Kimi 余额（立即 + 60s 轮询；仅局域网可达 3082 且开关开启时）
+    if (FeatureFlags.BALANCE_ENABLED) {
+      this.checkBalance();
+      this.startBalanceCountdown();
+      if (this.balanceTimer < 0) {
+        this.balanceTimer = setInterval(() => {
+          this.checkBalance();
+        }, 60000);
+      }
     }
     if (this.sessionTimer < 0) {
       this.sessionTimer = setInterval(() => {
@@ -407,6 +409,9 @@ struct Index {
 
   /** 查 DeepSeek 余额（电脑端 push-notify :3082/api/balance；仅局域网可达）。 */
   private checkBalance(): void {
+    if (!FeatureFlags.BALANCE_ENABLED) {
+      return;
+    }
     if (this.balanceChecking) {
       return;
     }
@@ -607,6 +612,9 @@ struct Index {
 
   /** 5 分钟倒计时（每次余额变化重置为满格，每秒递减）。 */
   private startBalanceCountdown(): void {
+    if (!FeatureFlags.BALANCE_ENABLED) {
+      return;
+    }
     if (this.balanceTickTimer >= 0) {
       return;
     }
@@ -1378,9 +1386,11 @@ struct Index {
             this.PushStatusRow()
           }
 
-          this.BalanceCard()
+          if (FeatureFlags.BALANCE_ENABLED) {
+            this.BalanceCard()
 
-          this.KimiBalanceCard()
+            this.KimiBalanceCard()
+          }
 
           this.LatestSessionCard()
 

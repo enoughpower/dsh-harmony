@@ -14,7 +14,7 @@
 | 平板/折叠屏双栏、底部 TabBar | ✅ 保留 | UI 自适应 |
 | 全局沉浸式状态栏、深/浅色 | ✅ 保留 | 无隐私影响 |
 | 桌面服务卡片 | ✅ 保留 | 显示最近连接 / 最新会话 |
-| 余额卡（DeepSeek / Kimi） | ✅ 保留 | 局域网读用户电脑 :3082，无云端账号 |
+| 余额卡（DeepSeek / Kimi） | ⛔ 上架版关闭 | 依赖用户电脑本地部署 push-notify(:3082) + API Key；上架版 `BALANCE_ENABLED=false`：不显示卡片、不发起 :3082 余额请求 |
 | 导出 / 下载 | ✅ 保留（降级） | 改走系统文件选择器，不申请受限权限 |
 | Push Kit 推送 / 通知权限 | ⛔ 上架版关闭 | `FeatureFlags.PUSH_ENABLED=false`：不建 token、不申请通知、隐藏推送状态行 |
 | AGC 配置 agconnect-services.json | ⛔ 不入包 | 构建期间临时移出 |
@@ -47,7 +47,7 @@
 ALLOW_DIRTY=1 ./scripts/build-store.sh --check   # 允许工作区有未提交改动
 ```
 
-脚本行为：临时置 `PUSH_ENABLED=false` → 移出 AGC 配置 → 改 `versionCode` → `assembleApp(product=release)` → 复制到 `release/` → 打印 SHA256 → 尝试 `hap-sign-tool verify-app`；**退出时自动还原**所有临时改动。
+脚本行为：临时置 `PUSH_ENABLED=false`、`BALANCE_ENABLED=false` → 移出 AGC 配置 → 改 `versionCode` → `assembleApp(product=release)` → 复制到 `release/` → 打印 SHA256 → 尝试 `hap-sign-tool verify-app`；**退出时自动还原**所有临时改动。
 
 ## 5. 上架前检查清单
 
@@ -64,6 +64,7 @@ ALLOW_DIRTY=1 ./scripts/build-store.sh --check   # 允许工作区有未提交�
 | 项 | 全功能版（master 默认） | 上架版 |
 | --- | --- | --- |
 | `FeatureFlags.PUSH_ENABLED` | true | false（构建时临时） |
+| `FeatureFlags.BALANCE_ENABLED` | true | false（构建时临时；不显示余额卡、不请求 :3082） |
 | AGC `agconnect-services.json` | 打包进 rawfile | 构建时移出 |
 | 通知权限 | 首启申请 | 不申请 |
 | 推送状态行 / 余额推送 | 显示 | 隐藏 |

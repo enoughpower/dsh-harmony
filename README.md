@@ -65,8 +65,8 @@ dsh-pocket 安装与使用见其 [README](https://github.com/shaobeichen/dsh-poc
 
 同一分支可产出自用全功能版与**上架版**；功能取舍、权限白名单与检查清单见 [docs/STORE.md](docs/STORE.md)。
 
-- **保留**：扫码连接 / ArkWeb 控制台 / 原生会话列表与详情 / 平板双栏 / 沉浸式与深色 / 服务卡片 / 余额卡（读用户自建电脑服务）
-- **裁剪（上架版）**：Push Kit 推送与通知权限、AGC 配置、受限的 `READ_WRITE_DOWNLOAD_DIRECTORY` 权限（导出改用系统文件选择器）
+- **保留**：扫码连接 / ArkWeb 控制台 / 原生会话列表与详情 / 平板双栏 / 沉浸式与深色 / 服务卡片
+- **裁剪（上架版）**：Push Kit 推送与通知权限、余额卡（依赖电脑端本地 push-notify，上架版关闭且不请求 `:3082`）、AGC 配置、受限的 `READ_WRITE_DOWNLOAD_DIRECTORY` 权限（导出改用系统文件选择器）
 - **权限**：上架包仅声明 3 个 —— `INTERNET` / `GET_NETWORK_INFO` / `CAMERA`
 - **构建**：`./scripts/build-store.sh --check` 体检 → `./scripts/build-store.sh <versionCode>` 产出 `release/*.app`
 
