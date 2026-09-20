@@ -21,7 +21,15 @@ source "$ROOT/scripts/dev-tools.sh"
 cd "$ROOT"
 
 CHECK_ONLY=0
-if [ "${1:-}" = "--check" ]; then CHECK_ONLY=1; shift || true; fi
+INSTALL=0
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --check) CHECK_ONLY=1 ;;
+    --install) INSTALL=1 ;;
+    *) break ;;
+  esac
+  shift
+done
 VC="${1:-}"
 NAME="${2:-}"
 
@@ -79,9 +87,13 @@ if [ "$CHECK_ONLY" = "1" ]; then
   exit 0
 fi
 
-[ -n "$VC" ] || fail "用法: build-store.sh <versionCode> [name]  |  build-store.sh --check"
-case "$VC" in (*[!0-9]*) fail "versionCode 必须为数字: $VC";; esac
-[ -n "$NAME" ] || NAME="DSH-Harmony-store-${VC}-$(date +%Y%m%d)"
+if [ "$INSTALL" != "1" ] && [ -z "$VC" ]; then
+  fail "用法: build-store.sh <versionCode> [name] | build-store.sh --check | build-store.sh --install [versionCode]"
+fi
+if [ -n "$VC" ]; then
+  case "$VC" in (*[!0-9]*) fail "versionCode 必须为数字: $VC";; esac
+fi
+[ -n "$NAME" ] || NAME="DSH-Harmony-store-${VC:-$(date +%Y%m%d)}-$(date +%Y%m%d)"
 
 # --- 临时裁剪 + 还原 ---
 AGC_BAK=""
@@ -95,14 +107,35 @@ echo "==> 临时裁剪"
 sed -i '' \
   -e 's/static readonly PUSH_ENABLED: boolean = true;/static readonly PUSH_ENABLED: boolean = false;/' \
   -e 's/static readonly BALANCE_ENABLED: boolean = true;/static readonly BALANCE_ENABLED: boolean = false;/' "$FF"
-python3 - "$APPJSON" "$VC" <<'PY'
+if [ -n "$VC" ]; then
+  python3 - "$APPJSON" "$VC" <<'PY'
 import re, sys
 p, vc = sys.argv[1], sys.argv[2]
 s = open(p, encoding='utf-8').read()
 open(p, 'w', encoding='utf-8').write(re.sub(r'"versionCode":\s*\d+', '"versionCode": ' + vc, s))
 PY
+fi
 if [ -f "$AGC" ]; then AGC_BAK="$(mktemp -t agconnect)"; mv "$AGC" "$AGC_BAK"; fi
-info "PUSH_ENABLED=false, BALANCE_ENABLED=false, versionCode=$VC"
+info "PUSH_ENABLED=false, BALANCE_ENABLED=false, versionCode=${VC:-unchanged}"
+
+if [ "$INSTALL" = "1" ]; then
+  # 商店版功能配置 + 调试签名：可 hdc 侧载，用于真机验收商店版行为
+  echo "==> 构建可侧载商店版 HAP（product=default, buildMode=release）"
+  "$HVIGORW" --mode module -p module=entry@default -p product=default -p buildMode=release assembleHap --no-daemon
+  HAP="$(find "$ROOT/entry/build" -name 'entry-default-signed.hap' -path '*outputs*' 2>/dev/null | head -1 || true)"
+  [ -n "$HAP" ] || fail "未找到 signed HAP"
+  echo "==> 安装到设备"
+  [ -n "${HDC:-}" ] || fail "未找到 hdc"
+  INSTALL_OUT="$("$HDC" install -r "$HAP" 2>&1 || true)"
+  echo "$INSTALL_OUT" | tail -3
+  case "$INSTALL_OUT" in
+    *"install bundle successfully"*) ;;
+    *) fail "HAP 安装失败（检查设备连接：hdc list targets / tconn）" ;;
+  esac
+  "$HDC" shell aa start -a EntryAbility -b com.dsh.lite >/dev/null 2>&1 || true
+  echo "==> 已安装商店版行为包（PUSH_ENABLED=false, BALANCE_ENABLED=false）"
+  exit 0
+fi
 
 echo "==> 构建 .app（product=release, buildMode=release）"
 "$HVIGORW" --mode project -p product=release -p buildMode=release assembleApp --no-daemon

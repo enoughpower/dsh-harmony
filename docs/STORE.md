@@ -41,11 +41,14 @@
 ## 4. 构建
 
 ```bash
-./scripts/build-store.sh --check        # 上架体检：权限白名单 / 推送开关 / 签名配置 / 工作区
+./scripts/build-store.sh --check        # 上架体检：权限白名单 / 推送开关 / 余额开关 / 签名配置 / 工作区
 ./scripts/build-store.sh 1000007        # 构建上架包 → release/DSH-Harmony-store-1000007-YYYYMMDD.app
 ./scripts/build-store.sh 1000007 myname # 自定义产物名
+./scripts/build-store.sh --install      # 商店版功能配置 + 调试签名，直接装机验收（可 hdc 侧载）
 ALLOW_DIRTY=1 ./scripts/build-store.sh --check   # 允许工作区有未提交改动
 ```
+
+> ⚠️ `.app` 不能 `hdc install`：商店包签名在 `.app` 外层，内部 HAP 无签名（报 `9568320 no signature file`），且发布证书禁止侧载。真机验收商店版行为请用 `--install`（调试签名，功能开关与上架版一致）。
 
 脚本行为：临时置 `PUSH_ENABLED=false`、`BALANCE_ENABLED=false` → 移出 AGC 配置 → 改 `versionCode` → `assembleApp(product=release)` → 复制到 `release/` → 打印 SHA256 → 尝试 `hap-sign-tool verify-app`；**退出时自动还原**所有临时改动。
 
