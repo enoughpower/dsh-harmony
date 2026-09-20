@@ -69,6 +69,7 @@ dsh-pocket 安装与使用见其 [README](https://github.com/shaobeichen/dsh-poc
 - **裁剪（上架版）**：Push Kit 推送与通知权限、余额卡（依赖电脑端本地 push-notify，上架版关闭且不请求 `:3082`）、AGC 配置、受限的 `READ_WRITE_DOWNLOAD_DIRECTORY` 权限（导出改用系统文件选择器）
 - **权限**：上架包仅声明 3 个 —— `INTERNET` / `GET_NETWORK_INFO` / `CAMERA`
 - **构建**：`./scripts/build-store.sh --check` 体检 → `./scripts/build-store.sh <versionCode>` 产出 `release/*.app`
+- **隐私政策**：见 [docs/PRIVACY.md](docs/PRIVACY.md)（权限声明与包内一致：仅 CAMERA 为用户授权权限）
 
 ## 本地开发
 
