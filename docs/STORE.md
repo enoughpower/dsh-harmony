@@ -56,7 +56,7 @@ ALLOW_DIRTY=1 ./scripts/build-store.sh --check   # 允许工作区有未提交�
 
 - [ ] `./scripts/build-store.sh --check` 通过
 - [ ] 应用图标（`release/icon/`）、截图（`release/screenshots/`）、应用简介/版本说明
-- [ ] 隐私政策：使用 [PRIVACY.md](PRIVACY.md) 文本，**权限声明必须与包内一致**——只声明 `CAMERA`（user_grant），不要写 `READ_WRITE_DOWNLOAD_DIRECTORY`（审包会校验 user_grant 权限与隐私政策一致性）
+- [ ] 隐私政策：本应用仅保存连接地址，不采集个人信息、不上传用户数据（需在商店后台填写）
 - [ ] 权限说明：相机仅用于扫码；网络仅用于连接用户自己的电脑
 - [ ] 发布证书与 AGC 应用指纹一致；`versionCode` 高于线上版本
 - [ ] 目标设备：phone / tablet；兼容 SDK 与 API 26 构建验证通过
