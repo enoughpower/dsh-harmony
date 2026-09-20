@@ -1,0 +1,35 @@
+<!-- DSH Harmony app icon (source of record)
+     background: #FFFFFF with a large gradient disc (r=430)
+     gradient: 3-stop diagonal #4D6BFE -> #8B4DFF -> #D946EF
+     mark: original monitor + phone motif as bolder white line art (stroke 52, was 42)
+           monitor outline + neck + base, phone outline overlapping it (no arc / badge / screen fills)
+           the phone silhouette is knocked out of the monitor (band 104) so the layers stay separate
+     rendered PNGs: AppScope|entry app_icon.png 1024, entry startup.png 512, release/icon/icon-{216,1024}.png
+-->
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="gg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#4D6BFE"/>
+      <stop offset="0.55" stop-color="#8B4DFF"/>
+      <stop offset="1" stop-color="#D946EF"/>
+    </linearGradient>
+    <mask id="cut" maskUnits="userSpaceOnUse" x="0" y="0" width="1024" height="1024">
+      <rect width="1024" height="1024" fill="#FFFFFF"/>
+      <g transform="translate(512,512) scale(0.68) translate(-450,-492)">
+        <rect x="540" y="330" width="210" height="404" rx="64" fill="none" stroke="#000000" stroke-width="104"/>
+      </g>
+    </mask>
+  </defs>
+  <rect width="1024" height="1024" fill="#FFFFFF"/>
+  <circle cx="512" cy="512" r="430" fill="url(#gg)"/>
+  <g mask="url(#cut)">
+    <g transform="translate(512,512) scale(0.68) translate(-450,-492)">
+      <rect x="150" y="250" width="410" height="280" rx="46" fill="none" stroke="#FFFFFF" stroke-width="52"/>
+      <rect x="316" y="518" width="78" height="56" rx="18" fill="#FFFFFF"/>
+      <rect x="204" y="568" width="302" height="48" rx="24" fill="#FFFFFF"/>
+    </g>
+  </g>
+  <g transform="translate(512,512) scale(0.68) translate(-450,-492)">
+    <rect x="540" y="330" width="210" height="404" rx="64" fill="none" stroke="#FFFFFF" stroke-width="52"/>
+  </g>
+</svg>
