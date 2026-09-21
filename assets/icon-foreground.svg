@@ -1,8 +1,9 @@
 <!-- DSH Harmony app icon - FOREGROUND layer of the layered icon (分层图标)
      1024x1024 transparent layer: white monitor + phone bodies, screens knocked out so the
      gradient background layer shows through them.
-     HUAWEI spec asks for the visible content inside a 450x450 box; current content box is
-     ~610x372, kept as-is to preserve the approved look (a 0.738x variant is available).
+     depth: the device group casts a soft shadow (blur 20, offset +10/+22, #0B1030 @34%) that is
+     hidden under the bodies so the glass screens stay pure gradient; the phone additionally casts
+     onto the monitor, which makes it read as the front layer - and makes the系统视差 visible.
      pairs with assets/icon-background.svg ; declared in media/layered_image.json
 -->
 <svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
@@ -16,12 +17,34 @@
       <rect width="1024" height="1024" fill="#FFFFFF"/>
       <rect x="649" y="375" width="136" height="308" rx="22" fill="#000000"/>
     </mask>
+    <filter id="castShadow" x="-40%" y="-40%" width="180%" height="190%" color-interpolation-filters="sRGB">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="20" result="blur"/>
+      <feOffset in="blur" dx="10" dy="22" result="off"/>
+      <feFlood flood-color="#0B1030" flood-opacity="0.34" result="col"/>
+      <feComposite in="col" in2="off" operator="in"/>
+    </filter>
+    <mask id="notBody" maskUnits="userSpaceOnUse" x="0" y="0" width="1024" height="1024">
+      <rect width="1024" height="1024" fill="#FFFFFF"/>
+      <g fill="#000000"><rect x="207" y="297" width="500" height="300" rx="50"/>
+    <rect x="431" y="595" width="52" height="46" rx="12"/>
+    <rect x="327" y="629" width="260" height="40" rx="20"/><rect x="617" y="327" width="200" height="400" rx="52"/></g>
+    </mask>
+    <mask id="monArea" maskUnits="userSpaceOnUse" x="0" y="0" width="1024" height="1024">
+      <rect width="1024" height="1024" fill="#000000"/>
+      <g fill="#FFFFFF"><rect x="207" y="297" width="500" height="300" rx="50"/>
+    <rect x="431" y="595" width="52" height="46" rx="12"/>
+    <rect x="327" y="629" width="260" height="40" rx="20"/></g>
+    </mask>
   </defs>
+  <g mask="url(#notBody)"><g filter="url(#castShadow)" fill="#000000"><rect x="207" y="297" width="500" height="300" rx="50"/>
+    <rect x="431" y="595" width="52" height="46" rx="12"/>
+    <rect x="327" y="629" width="260" height="40" rx="20"/><rect x="617" y="327" width="200" height="400" rx="52"/></g></g>
   <g mask="url(#monitor)">
     <rect x="207" y="297" width="500" height="300" rx="50" fill="#FFFFFF"/>
     <rect x="431" y="595" width="52" height="46" rx="12" fill="#FFFFFF"/>
     <rect x="327" y="629" width="260" height="40" rx="20" fill="#FFFFFF"/>
   </g>
+  <g mask="url(#monArea)"><g filter="url(#castShadow)" fill="#000000"><rect x="617" y="327" width="200" height="400" rx="52"/></g></g>
   <g mask="url(#phone)">
     <rect x="617" y="327" width="200" height="400" rx="52" fill="#FFFFFF"/>
   </g>
