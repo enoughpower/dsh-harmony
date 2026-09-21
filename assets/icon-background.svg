@@ -1,0 +1,20 @@
+<!-- DSH Harmony app icon - BACKGROUND layer of the layered icon (分层图标)
+     full-bleed 1024x1024 gradient plate, no transparency, no disc
+     pairs with assets/icon-foreground.svg ; declared in media/layered_image.json
+-->
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="gg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#4D6BFE"/>
+      <stop offset="0.52" stop-color="#8B4DFF"/>
+      <stop offset="1" stop-color="#D946EF"/>
+    </linearGradient>
+    <radialGradient id="sheen" cx="0.30" cy="0.14" r="0.85">
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity="0.16"/>
+      <stop offset="0.55" stop-color="#FFFFFF" stop-opacity="0"/>
+      <stop offset="1" stop-color="#FFFFFF" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="1024" height="1024" fill="url(#gg)"/>
+  <rect width="1024" height="1024" fill="url(#sheen)"/>
+</svg>

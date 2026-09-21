@@ -1,0 +1,28 @@
+<!-- DSH Harmony app icon - FOREGROUND layer of the layered icon (分层图标)
+     1024x1024 transparent layer: white monitor + phone bodies, screens knocked out so the
+     gradient background layer shows through them.
+     HUAWEI spec asks for the visible content inside a 450x450 box; current content box is
+     ~610x372, kept as-is to preserve the approved look (a 0.738x variant is available).
+     pairs with assets/icon-background.svg ; declared in media/layered_image.json
+-->
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <defs>
+    <mask id="monitor" maskUnits="userSpaceOnUse" x="0" y="0" width="1024" height="1024">
+      <rect width="1024" height="1024" fill="#FFFFFF"/>
+      <rect x="247" y="333" width="420" height="180" rx="18" fill="#000000"/>
+      <rect x="599" y="309" width="236" height="436" rx="70" fill="#000000"/>
+    </mask>
+    <mask id="phone" maskUnits="userSpaceOnUse" x="0" y="0" width="1024" height="1024">
+      <rect width="1024" height="1024" fill="#FFFFFF"/>
+      <rect x="649" y="375" width="136" height="308" rx="22" fill="#000000"/>
+    </mask>
+  </defs>
+  <g mask="url(#monitor)">
+    <rect x="207" y="297" width="500" height="300" rx="50" fill="#FFFFFF"/>
+    <rect x="431" y="595" width="52" height="46" rx="12" fill="#FFFFFF"/>
+    <rect x="327" y="629" width="260" height="40" rx="20" fill="#FFFFFF"/>
+  </g>
+  <g mask="url(#phone)">
+    <rect x="617" y="327" width="200" height="400" rx="52" fill="#FFFFFF"/>
+  </g>
+</svg>
